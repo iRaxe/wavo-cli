@@ -3,8 +3,11 @@
 package config
 
 import (
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/iRaxe/wavo-cli/internal/brand"
 )
 
 // Guards the dev build profile. Run with `go test -tags dev ./internal/config/`.
@@ -17,8 +20,8 @@ func TestDevBuildProfile(t *testing.T) {
 	if configFileName != "config.dev.yaml" {
 		t.Fatalf("configFileName = %q, want config.dev.yaml", configFileName)
 	}
-	if keyringService != "chatwoot-cli-dev" {
-		t.Fatalf("keyringService = %q, want chatwoot-cli-dev", keyringService)
+	if keyringService != brand.DevKeyringService {
+		t.Fatalf("keyringService = %q, want %q", keyringService, brand.DevKeyringService)
 	}
 
 	t.Setenv("HOME", t.TempDir())
@@ -26,7 +29,7 @@ func TestDevBuildProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigPath() error = %v", err)
 	}
-	if !strings.HasSuffix(path, "/config.dev.yaml") {
-		t.Fatalf("ConfigPath() = %q, want suffix /config.dev.yaml", path)
+	if want := filepath.Join(os.Getenv("HOME"), brand.ConfigDirName, "config.dev.yaml"); path != want {
+		t.Fatalf("ConfigPath() = %q, want %q", path, want)
 	}
 }

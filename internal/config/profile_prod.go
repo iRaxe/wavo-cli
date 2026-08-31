@@ -2,6 +2,8 @@
 
 package config
 
+import "github.com/iRaxe/wavo-cli/internal/brand"
+
 // Production build profile. This is the default for `go build` and every
 // released binary (goreleaser passes no build tags), so credentials live in the
 // canonical config file and keyring service.
@@ -10,7 +12,7 @@ package config
 // never compiled into release builds — building for prod disables that path.
 const (
 	configFileName = "config.yaml"
-	keyringService = "chatwoot-cli"
+	keyringService = brand.KeyringService
 
 	// IsDev reports whether this binary was built with `-tags dev`.
 	IsDev = false

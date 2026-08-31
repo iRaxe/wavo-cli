@@ -2,9 +2,25 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/iRaxe/wavo-cli/internal/brand"
 )
+
+func TestConfigDirUsesWavoDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+	if want := filepath.Join(home, brand.ConfigDirName); dir != want {
+		t.Fatalf("ConfigDir() = %q, want %q", dir, want)
+	}
+}
 
 func TestSaveOmitsAPIKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())

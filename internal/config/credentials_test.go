@@ -3,8 +3,10 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/zalando/go-keyring"
 )
 
@@ -35,6 +37,12 @@ func TestResolveAPIKeyPrefersEnvironment(t *testing.T) {
 	}
 	if source != CredentialSourceEnvironment {
 		t.Fatalf("source = %q, want %q", source, CredentialSourceEnvironment)
+	}
+}
+
+func TestAPIKeyEnvironmentUsesWavoBrand(t *testing.T) {
+	if APIKeyEnv != brand.APIKeyEnv {
+		t.Fatalf("APIKeyEnv = %q, want %q", APIKeyEnv, brand.APIKeyEnv)
 	}
 }
 
@@ -104,41 +112,6 @@ func TestResolveAPIKeyRejectsRawStableCredential(t *testing.T) {
 	}
 }
 
-func TestResolveAPIKeyMigratesLegacyKeyringToken(t *testing.T) {
-	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com/", AccountID: 127}
-
-	if err := keyring.Set(keyringService, legacyCredentialKey(cfg), "legacy-token"); err != nil {
-		t.Fatalf("keyring.Set() error = %v", err)
-	}
-
-	apiKey, source, err := ResolveAPIKey(&Config{BaseURL: "https://app.chatwoot.com", AccountID: 127})
-	if err != nil {
-		t.Fatalf("ResolveAPIKey() error = %v", err)
-	}
-	if apiKey != "legacy-token" {
-		t.Fatalf("apiKey = %q, want legacy-token", apiKey)
-	}
-	if source != CredentialSourceKeyring {
-		t.Fatalf("source = %q, want %q", source, CredentialSourceKeyring)
-	}
-
-	stable, err := keyring.Get(keyringService, apiKeyKeyringEntry)
-	if err != nil {
-		t.Fatalf("stable keyring token missing after migration: %v", err)
-	}
-	var credential savedCredential
-	if err := json.Unmarshal([]byte(stable), &credential); err != nil {
-		t.Fatalf("stable keyring token is not JSON after migration: %v", err)
-	}
-	if credential.BaseURL != "https://app.chatwoot.com" || credential.AccountID != 127 || credential.APIKey != "legacy-token" {
-		t.Fatalf("stable credential = %#v, want migrated scoped credential", credential)
-	}
-	if _, err := keyring.Get(keyringService, legacyCredentialKey(cfg)); !errors.Is(err, keyring.ErrNotFound) {
-		t.Fatalf("legacy token still present after migration, err = %v", err)
-	}
-}
-
 func TestResolveAPIKeyMissing(t *testing.T) {
 	initMockKeyring(t)
 	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 125}
@@ -149,6 +122,20 @@ func TestResolveAPIKeyMissing(t *testing.T) {
 	}
 	if source != CredentialSourceMissing {
 		t.Fatalf("source = %q, want %q", source, CredentialSourceMissing)
+	}
+}
+
+func TestMissingAPIKeyErrorUsesWavoLogin(t *testing.T) {
+	initMockKeyring(t)
+
+	_, _, err := ResolveAPIKey(&Config{BaseURL: brand.DefaultBaseURL, AccountID: 7})
+	if !errors.Is(err, ErrAPIKeyNotFound) {
+		t.Fatalf("ResolveAPIKey() error = %v, want ErrAPIKeyNotFound", err)
+	}
+	for _, want := range []string{"wavo auth login", brand.APIKeyEnv} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("ResolveAPIKey() error = %q, want substring %q", err, want)
+		}
 	}
 }
 
@@ -194,6 +181,25 @@ func TestDeleteAPIKeyRemovesAllServiceEntries(t *testing.T) {
 	}
 }
 
+func TestDeleteAPIKeyDoesNotDeleteUpstreamCredentials(t *testing.T) {
+	keyring.MockInit()
+	t.Cleanup(func() { _ = keyring.DeleteAll("chatwoot-cli") })
+	if err := keyring.Set("chatwoot-cli", "api-key", "upstream-secret"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{BaseURL: brand.DefaultBaseURL, AccountID: 7}
+	if err := SaveAPIKey(cfg, "wavo-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := DeleteAPIKey(cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, err := keyring.Get("chatwoot-cli", "api-key")
+	if err != nil || got != "upstream-secret" {
+		t.Fatalf("upstream credential changed: got=%q err=%v", got, err)
+	}
+}
+
 // TestDeleteAPIKeyLeavesOtherProfileServiceIntact guards the dev/prod isolation
 // guarantee: keyringService is namespaced per build profile, so logging out of
 // one build must not delete the other build's saved token. DeleteAPIKey wipes
@@ -202,10 +208,10 @@ func TestDeleteAPIKeyLeavesOtherProfileServiceIntact(t *testing.T) {
 	initMockKeyring(t)
 	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 130}
 
-	// Stand in for the other build profile's keyring namespace (prod's
-	// "chatwoot-cli" vs dev's "chatwoot-cli-dev"); the exact name doesn't matter,
-	// only that it differs from the active keyringService.
-	const otherProfileService = "chatwoot-cli-other-profile"
+	otherProfileService := brand.KeyringService
+	if !IsDev {
+		otherProfileService = brand.DevKeyringService
+	}
 	if err := keyring.Set(otherProfileService, apiKeyKeyringEntry, "other-profile-token"); err != nil {
 		t.Fatalf("seed other-profile service: %v", err)
 	}

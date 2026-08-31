@@ -7,16 +7,17 @@ import (
 	"os"
 	"strings"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/zalando/go-keyring"
 )
 
 const (
-	APIKeyEnv          = "CHATWOOT_API_KEY"
+	APIKeyEnv          = brand.APIKeyEnv
 	apiKeyKeyringEntry = "api-key"
 )
 
-// keyringService is build-profile specific ("chatwoot-cli" for prod,
-// "chatwoot-cli-dev" for dev). Namespacing the whole service per profile keeps
+// keyringService is build-profile specific ("wavo-cli" for prod,
+// "wavo-cli-dev" for dev). Namespacing the whole service per profile keeps
 // logout's DeleteAll(keyringService) scoped to the active build, so a dev logout
 // can't erase a prod login's token and vice versa. See profile_prod.go /
 // profile_dev.go.
@@ -39,7 +40,7 @@ type savedCredential struct {
 
 // ResolveAPIKey implements the auth flow for the CLI. YAML config intentionally
 // stores only non-secrets, and plaintext api_key values from older configs are
-// ignored. CHATWOOT_API_KEY wins for CI, coding agents, and temporary overrides;
+// ignored. WAVO_API_KEY wins for CI, coding agents, and temporary overrides;
 // otherwise saved interactive logins read the token from the OS keyring.
 func ResolveAPIKey(cfg *Config) (string, CredentialSource, error) {
 	if apiKey := strings.TrimSpace(os.Getenv(APIKeyEnv)); apiKey != "" {
@@ -60,20 +61,6 @@ func ResolveAPIKey(cfg *Config) (string, CredentialSource, error) {
 	}
 	if !errors.Is(err, keyring.ErrNotFound) {
 		return "", CredentialSourceMissing, fmt.Errorf("failed to read API key from keyring: %w", err)
-	}
-
-	// TODO(v1): remove this legacy key migration after users have had a release
-	// cycle to move from URL/account-scoped keyring entries to api-key.
-	apiKey, err := keyring.Get(keyringService, legacyCredentialKey(cfg))
-	if err == nil {
-		if err := saveAPIKeyToKeyring(cfg, apiKey); err != nil {
-			return "", CredentialSourceMissing, fmt.Errorf("failed to migrate API key in keyring: %w", err)
-		}
-		_ = keyring.Delete(keyringService, legacyCredentialKey(cfg))
-		return apiKey, CredentialSourceKeyring, nil
-	}
-	if !errors.Is(err, keyring.ErrNotFound) {
-		return "", CredentialSourceMissing, fmt.Errorf("failed to read legacy API key from keyring: %w", err)
 	}
 
 	return "", CredentialSourceMissing, missingAPIKeyError()
@@ -131,15 +118,11 @@ func DeleteAPIKey(_ *Config) error {
 }
 
 func missingAPIKeyError() error {
-	return fmt.Errorf("%w; run 'chatwoot auth login' or set %s", ErrAPIKeyNotFound, APIKeyEnv)
+	return fmt.Errorf("%w; run 'wavo auth login' or set %s", ErrAPIKeyNotFound, APIKeyEnv)
 }
 
 func credentialScopeMismatchError() error {
-	return fmt.Errorf("%w; saved keyring credential does not match configured instance; run 'chatwoot auth login' for this base URL and account", ErrAPIKeyNotFound)
-}
-
-func legacyCredentialKey(cfg *Config) string {
-	return fmt.Sprintf("%s/accounts/%d", normalizeBaseURL(cfg.BaseURL), cfg.AccountID)
+	return fmt.Errorf("%w; saved keyring credential does not match configured Wavo instance; run 'wavo auth login' for this base URL and account", ErrAPIKeyNotFound)
 }
 
 func normalizeBaseURL(baseURL string) string {

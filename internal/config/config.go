@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,7 +27,7 @@ func ConfigDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".chatwoot"), nil
+	return filepath.Join(homeDir, brand.ConfigDirName), nil
 }
 
 func ConfigPath() (string, error) {

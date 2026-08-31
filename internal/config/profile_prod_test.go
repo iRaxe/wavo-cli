@@ -3,8 +3,11 @@
 package config
 
 import (
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/iRaxe/wavo-cli/internal/brand"
 )
 
 // Guards the production build profile. Runs under the default (untagged) build;
@@ -16,8 +19,8 @@ func TestProdBuildProfile(t *testing.T) {
 	if configFileName != "config.yaml" {
 		t.Fatalf("configFileName = %q, want config.yaml", configFileName)
 	}
-	if keyringService != "chatwoot-cli" {
-		t.Fatalf("keyringService = %q, want chatwoot-cli", keyringService)
+	if keyringService != brand.KeyringService {
+		t.Fatalf("keyringService = %q, want %q", keyringService, brand.KeyringService)
 	}
 
 	t.Setenv("HOME", t.TempDir())
@@ -25,7 +28,7 @@ func TestProdBuildProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigPath() error = %v", err)
 	}
-	if !strings.HasSuffix(path, "/config.yaml") {
-		t.Fatalf("ConfigPath() = %q, want suffix /config.yaml", path)
+	if want := filepath.Join(os.Getenv("HOME"), brand.ConfigDirName, "config.yaml"); path != want {
+		t.Fatalf("ConfigPath() = %q, want %q", path, want)
 	}
 }
