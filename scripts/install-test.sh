@@ -127,24 +127,25 @@ run_install() {
   os=$3
   arch=$4
   archive=$5
+  api_tag=${6:-v0.1.0-beta.2}
+  bad_checksum=${7:-0}
   install_dir="$root/$case_name/bin"
   home="$root/$case_name/home"
   mkdir -p "$install_dir" "$home"
   curl_log="$root/$case_name/curl.log"
   : > "$curl_log"
   clean_version=${version#v}
-  [ "$version" = latest ] && clean_version=${MOCK_TAG#v}
+  [ "$version" = latest ] && clean_version=${api_tag#v}
   asset="wavo_${clean_version}_${os}_$([ "$arch" = x86_64 ] && printf x86_64 || printf arm64).tar.gz"
   HOME="$home" PATH="$tools" NO_COLOR=1 \
     WAVO_INSTALL_DIR="$install_dir" WAVO_VERSION="$version" \
     MOCK_OS="$os" MOCK_ARCH="$arch" MOCK_ARCHIVE="$archive" \
     MOCK_ASSET_NAME="$asset" MOCK_CURL_LOG="$curl_log" \
+    MOCK_TAG="$api_tag" MOCK_BAD_CHECKSUM="$bad_checksum" \
     /bin/sh "$repo/install.sh"
 }
 
 make_archive "$root/regular.tar.gz" regular
-MOCK_TAG=v0.1.0-beta.2
-export MOCK_TAG
 
 run_install pinned v0.1.0-beta.1 Linux x86_64 "$root/regular.tar.gz" >/dev/null
 [ "$(cat "$root/pinned/bin/wavo")" = new-wavo ] || fail "pinned beta did not replace the binary"
@@ -165,24 +166,22 @@ for invalid in '0.1.0' 'v01.2.3' 'v1.2.3-01' 'v1.2.3/evil' 'v1.2.3*' 'v1.2.3 bad
 done
 ok "unsafe environment release tags are rejected"
 
-MOCK_TAG='v0.1.0/../../payload'
-export MOCK_TAG
-if run_install invalid-api latest Linux x86_64 "$root/regular.tar.gz" >/dev/null 2>&1; then
+if run_install invalid-api latest Linux x86_64 "$root/regular.tar.gz" 'v0.1.0/../../payload' >/dev/null 2>&1; then
   fail "unsafe API release tag was accepted"
 fi
 [ "$(wc -l < "$root/invalid-api/curl.log" | tr -d ' ')" = 1 ] || fail "unsafe API tag reached an asset URL"
 ok "unsafe API release tags are rejected before URL construction"
-MOCK_TAG=v0.1.0-beta.2
-export MOCK_TAG
-
 mkdir -p "$root/checksum/bin" "$root/checksum/home"
 printf 'old-wavo\n' > "$root/checksum/bin/wavo"
 chmod 0755 "$root/checksum/bin/wavo"
-if MOCK_BAD_CHECKSUM=1 run_install checksum v0.1.0-beta.1 Linux x86_64 "$root/regular.tar.gz" >/dev/null 2>&1; then
+if run_install checksum v0.1.0-beta.1 Linux x86_64 "$root/regular.tar.gz" v0.1.0-beta.2 1 >/dev/null 2>&1; then
   fail "checksum mismatch was accepted"
 fi
 [ "$(cat "$root/checksum/bin/wavo")" = old-wavo ] || fail "checksum failure replaced the existing binary"
+[ "${MOCK_BAD_CHECKSUM+x}" != x ] || fail "checksum fault injection leaked into the next scenario"
+[ "${MOCK_TAG+x}" != x ] || fail "API tag injection leaked into the next scenario"
 ok "checksum failure preserves the existing binary"
+ok "fault injection environment is isolated between scenarios"
 
 for kind in extra traversal absolute backslash symlink hardlink; do
   make_archive "$root/$kind.tar.gz" "$kind"
@@ -218,9 +217,7 @@ mkdir -p "$root/downgrade/bin" "$root/downgrade/home"
 printf 'old-wavo\n' > "$root/downgrade/bin/wavo"
 printf 'v0.2.0\n' > "$root/downgrade/bin/.wavo-version"
 chmod 0755 "$root/downgrade/bin/wavo"
-MOCK_TAG=v0.1.0
-export MOCK_TAG
-if run_install downgrade latest Linux x86_64 "$root/regular.tar.gz" >/dev/null 2>&1; then
+if run_install downgrade latest Linux x86_64 "$root/regular.tar.gz" v0.1.0 >/dev/null 2>&1; then
   fail "implicit latest downgrade was accepted"
 fi
 [ "$(cat "$root/downgrade/bin/wavo")" = old-wavo ] || fail "implicit downgrade changed the existing binary"
@@ -230,8 +227,6 @@ mkdir -p "$root/upgrade/bin" "$root/upgrade/home"
 printf 'old-wavo\n' > "$root/upgrade/bin/wavo"
 printf 'v0.1.0-beta.1\n' > "$root/upgrade/bin/.wavo-version"
 chmod 0755 "$root/upgrade/bin/wavo"
-MOCK_TAG=v0.1.0-beta.2
-export MOCK_TAG
 run_install upgrade latest Linux x86_64 "$root/regular.tar.gz" >/dev/null
 [ "$(cat "$root/upgrade/bin/wavo")" = new-wavo ] || fail "implicit latest upgrade did not replace the binary"
 [ "$(cat "$root/upgrade/bin/.wavo-version")" = v0.1.0-beta.2 ] || fail "version record was not updated"
