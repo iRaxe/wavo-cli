@@ -12,10 +12,36 @@ bundled_contract="$repo_root/internal/sdk/testdata/application_swagger.json"
 temporary_dir=$(mktemp -d)
 
 cleanup() {
-  rm -rf "$temporary_dir"
+  cleanup_original_status=$?
+  trap - EXIT HUP INT TERM
+  set +e
+  cleanup_failed=0
+  if [ -d "$temporary_dir" ]; then
+    chmod -R u+w "$temporary_dir" 2>/dev/null || true
+    rm -rf "$temporary_dir" || cleanup_failed=1
+  fi
+  if [ -e "$temporary_dir" ]; then
+    cleanup_failed=1
+  fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    printf '%s\n' "not ok - updater harness failed to remove its private fixtures" >&2
+  fi
+  if [ "$cleanup_original_status" -ne 0 ]; then
+    exit "$cleanup_original_status"
+  fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    exit 1
+  fi
+  exit 0
 }
 trap cleanup EXIT
 trap 'exit 2' HUP INT TERM
+
+readonly_cleanup_fixture="$temporary_dir/read-only cleanup fixture/nested"
+mkdir -p "$readonly_cleanup_fixture"
+printf '%s\n' 'cleanup fixture' >"$readonly_cleanup_fixture/file"
+chmod 0444 "$readonly_cleanup_fixture/file"
+chmod 0555 "$readonly_cleanup_fixture" "$(dirname "$readonly_cleanup_fixture")"
 
 fail() {
   printf 'not ok - %s\n' "$1" >&2
@@ -350,3 +376,8 @@ if find "$(dirname "$destination")" -name '.application_swagger.json.tmp.*' -pri
   fail "updater leaves no temporary files"
 fi
 pass "updater leaves no temporary files"
+
+if find /tmp -maxdepth 1 -type d -name 'wavo-swagger-validation.*' -print | grep -q .; then
+  fail "updater leaves no private Go contexts"
+fi
+pass "updater leaves no private Go contexts"

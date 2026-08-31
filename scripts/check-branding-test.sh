@@ -26,21 +26,48 @@ repo_workspace_created=0
 parent_workspace_created=0
 
 cleanup() {
+  cleanup_original_status=$?
+  trap - EXIT HUP INT TERM
+  set +e
+  cleanup_failed=0
   safe_git -C "$repo_root" update-index --force-remove -- \
     "$root_probe" "$sdk_probe" "$path_probe" \
-    "$clean_symlink" "$forbidden_symlink" "$broken_symlink" >/dev/null 2>&1 || true
+    "$clean_symlink" "$forbidden_symlink" "$broken_symlink" >/dev/null 2>&1 || cleanup_failed=1
   rm -f "$repo_root/$root_probe" "$repo_root/$sdk_probe" \
-    "$repo_root/$clean_symlink" "$repo_root/$forbidden_symlink" "$repo_root/$broken_symlink"
+    "$repo_root/$clean_symlink" "$repo_root/$forbidden_symlink" "$repo_root/$broken_symlink" || cleanup_failed=1
   if [ "$repo_workspace_created" -eq 1 ]; then
-    rm -f "$repo_workspace_file"
+    rm -f "$repo_workspace_file" || cleanup_failed=1
   fi
   if [ "$parent_workspace_created" -eq 1 ]; then
-    rm -f "$parent_workspace_file"
+    rm -f "$parent_workspace_file" || cleanup_failed=1
   fi
-  rm -rf "$repo_root/${path_probe_root:?}" "$temporary_dir"
+  rm -rf "$repo_root/${path_probe_root:?}" || cleanup_failed=1
+  if [ -d "$temporary_dir" ]; then
+    chmod -R u+w "$temporary_dir" 2>/dev/null || true
+    rm -rf "$temporary_dir" || cleanup_failed=1
+  fi
+  if [ -e "$temporary_dir" ]; then
+    cleanup_failed=1
+  fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    printf '%s\n' "not ok - branding harness failed to remove its private fixtures" >&2
+  fi
+  if [ "$cleanup_original_status" -ne 0 ]; then
+    exit "$cleanup_original_status"
+  fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    exit 1
+  fi
+  exit 0
 }
 trap cleanup EXIT
 trap 'exit 2' HUP INT TERM
+
+readonly_cleanup_fixture="$temporary_dir/read-only cleanup fixture/nested"
+mkdir -p "$readonly_cleanup_fixture"
+printf '%s\n' 'cleanup fixture' >"$readonly_cleanup_fixture/file"
+chmod 0444 "$readonly_cleanup_fixture/file"
+chmod 0555 "$readonly_cleanup_fixture" "$(dirname "$readonly_cleanup_fixture")"
 
 pass() {
   printf 'ok - %s\n' "$1"
@@ -264,3 +291,8 @@ pass "binary scan never invokes caller PATH tools"
 forbidden_binary="$temporary_dir/forbidden-binary"
 printf 'safe-prefix-%s-safe-suffix\n' "$upstream_marker" >"$forbidden_binary"
 expect_failure "binary marker is rejected" 1 "Compiled binary contains forbidden upstream branding:" "$scanner" "$forbidden_binary"
+
+if find /tmp -maxdepth 1 -type d -name 'wavo-brand-scan.*' -print | grep -q .; then
+  fail "scanner leaves no private Go contexts"
+fi
+pass "scanner leaves no private Go contexts"

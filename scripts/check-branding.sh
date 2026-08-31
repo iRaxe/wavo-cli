@@ -35,15 +35,33 @@ fi
 
 scan_validation_root=''
 cleanup() {
+  cleanup_original_status=$?
+  trap - EXIT HUP INT TERM
+  set +e
+  cleanup_failed=0
   if [ -n "$scan_validation_root" ]; then
     case "$scan_validation_root" in
       /tmp/wavo-brand-scan.*)
         if [ -d "$scan_validation_root" ]; then
-          rm -rf "$scan_validation_root"
+          chmod -R u+w "$scan_validation_root" 2>/dev/null || true
+          rm -rf "$scan_validation_root" || cleanup_failed=1
+          if [ -e "$scan_validation_root" ]; then
+            cleanup_failed=1
+          fi
         fi
         ;;
     esac
   fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    printf '%s\n' "Wavo branding scan failed to remove its private helper context." >&2
+  fi
+  if [ "$cleanup_original_status" -ne 0 ]; then
+    exit "$cleanup_original_status"
+  fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    exit 2
+  fi
+  exit 0
 }
 trap cleanup EXIT
 trap 'exit 2' HUP INT TERM

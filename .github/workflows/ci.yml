@@ -9,6 +9,27 @@ permissions:
   contents: read
 
 jobs:
+  branding:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Wavo branding gate
+        run: |
+          ./scripts/check-branding.sh
+          ./scripts/check-branding-test.sh
+          ./scripts/update-swagger-test.sh
+          mkdir -p ./bin
+          go build -trimpath -o ./bin/wavo ./cmd/wavo
+          ./scripts/check-branding.sh ./bin/wavo
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -30,15 +51,6 @@ jobs:
 
       - name: go vet
         run: go vet ./...
-
-      - name: Wavo branding gate
-        run: |
-          ./scripts/check-branding.sh
-          ./scripts/check-branding-test.sh
-          ./scripts/update-swagger-test.sh
-          mkdir -p ./bin
-          go build -trimpath -o ./bin/wavo ./cmd/wavo
-          ./scripts/check-branding.sh ./bin/wavo
 
       - name: go test
         run: go test -race -count=1 -covermode=atomic -coverprofile=cover.out ./...
@@ -137,3 +149,4 @@ jobs:
         with:
           scandir: "."
           ignore_paths: ".git"
+          check_together: true

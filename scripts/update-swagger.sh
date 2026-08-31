@@ -13,18 +13,39 @@ validator_binary=''
 . "$script_dir/safe-git.sh"
 
 cleanup() {
+  cleanup_original_status=$?
+  trap - EXIT HUP INT TERM
+  set +e
+  cleanup_failed=0
   if [ -n "$temporary_file" ] && [ -e "$temporary_file" ]; then
-    rm -f "$temporary_file"
+    rm -f "$temporary_file" || cleanup_failed=1
+    if [ -e "$temporary_file" ]; then
+      cleanup_failed=1
+    fi
   fi
   if [ -n "$validation_root" ]; then
     case "$validation_root" in
       /tmp/wavo-swagger-validation.*)
         if [ -d "$validation_root" ]; then
-          rm -rf "$validation_root"
+          chmod -R u+w "$validation_root" 2>/dev/null || true
+          rm -rf "$validation_root" || cleanup_failed=1
+          if [ -e "$validation_root" ]; then
+            cleanup_failed=1
+          fi
         fi
         ;;
     esac
   fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    printf '%s\n' "Wavo Swagger refresh failed to remove its private validation files." >&2
+  fi
+  if [ "$cleanup_original_status" -ne 0 ]; then
+    exit "$cleanup_original_status"
+  fi
+  if [ "$cleanup_failed" -ne 0 ]; then
+    exit 2
+  fi
+  exit 0
 }
 trap cleanup EXIT
 trap 'exit 2' HUP INT TERM
