@@ -9,7 +9,7 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// Plural: `chatwoot contacts` — list or search contacts.
+// Plural: `wavo contacts` — list or search contacts.
 // -----------------------------------------------------------------------------
 
 type ContactsCmd struct {
@@ -64,7 +64,7 @@ func (c *ContactsCmd) Run(app *App) error {
 }
 
 // -----------------------------------------------------------------------------
-// Singular: `chatwoot contact <verb> <id>` — context for one contact.
+// Singular: `wavo contact <verb> <id>` — context for one contact.
 // -----------------------------------------------------------------------------
 
 type ContactCmd struct {

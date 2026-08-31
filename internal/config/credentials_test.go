@@ -21,7 +21,7 @@ func initMockKeyring(t *testing.T) {
 
 func TestResolveAPIKeyPrefersEnvironment(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 123}
+	cfg := &Config{BaseURL: "https://wavo.example", AccountID: 123}
 
 	if err := SaveAPIKey(cfg, "keyring-token"); err != nil {
 		t.Fatalf("SaveAPIKey() error = %v", err)
@@ -48,13 +48,13 @@ func TestAPIKeyEnvironmentUsesWavoBrand(t *testing.T) {
 
 func TestResolveAPIKeyFromKeyring(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com/", AccountID: 124}
+	cfg := &Config{BaseURL: "https://wavo.example/", AccountID: 124}
 
 	if err := SaveAPIKey(cfg, "keyring-token"); err != nil {
 		t.Fatalf("SaveAPIKey() error = %v", err)
 	}
 
-	apiKey, source, err := ResolveAPIKey(&Config{BaseURL: "https://app.chatwoot.com", AccountID: 124})
+	apiKey, source, err := ResolveAPIKey(&Config{BaseURL: "https://wavo.example", AccountID: 124})
 	if err != nil {
 		t.Fatalf("ResolveAPIKey() error = %v", err)
 	}
@@ -73,7 +73,7 @@ func TestResolveAPIKeyFromKeyring(t *testing.T) {
 	if err := json.Unmarshal([]byte(stored), &credential); err != nil {
 		t.Fatalf("stored credential is not JSON: %v", err)
 	}
-	if credential.BaseURL != "https://app.chatwoot.com" || credential.AccountID != 124 || credential.APIKey != "keyring-token" {
+	if credential.BaseURL != "https://wavo.example" || credential.AccountID != 124 || credential.APIKey != "keyring-token" {
 		t.Fatalf("stored credential = %#v, want scoped api key", credential)
 	}
 }
@@ -141,7 +141,7 @@ func TestSaveAPIKeyWithRollbackDeletesOnlyNewCredential(t *testing.T) {
 
 func TestResolveAPIKeyRejectsMismatchedStableCredential(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 124}
+	cfg := &Config{BaseURL: "https://wavo.example", AccountID: 124}
 
 	if err := SaveAPIKey(cfg, "keyring-token"); err != nil {
 		t.Fatalf("SaveAPIKey() error = %v", err)
@@ -158,7 +158,7 @@ func TestResolveAPIKeyRejectsMismatchedStableCredential(t *testing.T) {
 
 func TestResolveAPIKeyRejectsRawStableCredential(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 124}
+	cfg := &Config{BaseURL: "https://wavo.example", AccountID: 124}
 
 	if err := keyring.Set(keyringService, apiKeyKeyringEntry, "raw-token"); err != nil {
 		t.Fatalf("keyring.Set() error = %v", err)
@@ -175,7 +175,7 @@ func TestResolveAPIKeyRejectsRawStableCredential(t *testing.T) {
 
 func TestResolveAPIKeyMissing(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 125}
+	cfg := &Config{BaseURL: "https://wavo.example", AccountID: 125}
 
 	_, source, err := ResolveAPIKey(cfg)
 	if !errors.Is(err, ErrAPIKeyNotFound) {
@@ -202,7 +202,7 @@ func TestMissingAPIKeyErrorUsesWavoLogin(t *testing.T) {
 
 func TestDeleteAPIKeyRemovesKeyringToken(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 126}
+	cfg := &Config{BaseURL: "https://wavo.example", AccountID: 126}
 
 	if err := SaveAPIKey(cfg, "keyring-token"); err != nil {
 		t.Fatalf("SaveAPIKey() error = %v", err)
@@ -219,7 +219,7 @@ func TestDeleteAPIKeyRemovesKeyringToken(t *testing.T) {
 
 func TestDeleteAPIKeyRemovesAllServiceEntries(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 128}
+	cfg := &Config{BaseURL: "https://wavo.example", AccountID: 128}
 
 	if err := keyring.Set(keyringService, apiKeyKeyringEntry, "stable-token"); err != nil {
 		t.Fatalf("keyring.Set(stable) error = %v", err)
@@ -242,10 +242,10 @@ func TestDeleteAPIKeyRemovesAllServiceEntries(t *testing.T) {
 	}
 }
 
-func TestDeleteAPIKeyDoesNotDeleteUpstreamCredentials(t *testing.T) {
+func TestDeleteAPIKeyDoesNotDeleteOtherServiceCredentials(t *testing.T) {
 	keyring.MockInit()
-	t.Cleanup(func() { _ = keyring.DeleteAll("chatwoot-cli") })
-	if err := keyring.Set("chatwoot-cli", "api-key", "upstream-secret"); err != nil {
+	t.Cleanup(func() { _ = keyring.DeleteAll("other-cli") })
+	if err := keyring.Set("other-cli", "api-key", "other-secret"); err != nil {
 		t.Fatal(err)
 	}
 	cfg := &Config{BaseURL: brand.DefaultBaseURL, AccountID: 7}
@@ -255,9 +255,9 @@ func TestDeleteAPIKeyDoesNotDeleteUpstreamCredentials(t *testing.T) {
 	if err := DeleteAPIKey(cfg); err != nil {
 		t.Fatal(err)
 	}
-	got, err := keyring.Get("chatwoot-cli", "api-key")
-	if err != nil || got != "upstream-secret" {
-		t.Fatalf("upstream credential changed: got=%q err=%v", got, err)
+	got, err := keyring.Get("other-cli", "api-key")
+	if err != nil || got != "other-secret" {
+		t.Fatalf("other credential changed: got=%q err=%v", got, err)
 	}
 }
 
@@ -267,7 +267,7 @@ func TestDeleteAPIKeyDoesNotDeleteUpstreamCredentials(t *testing.T) {
 // only keyringService, never another service's entries.
 func TestDeleteAPIKeyLeavesOtherProfileServiceIntact(t *testing.T) {
 	initMockKeyring(t)
-	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 130}
+	cfg := &Config{BaseURL: "https://wavo.example", AccountID: 130}
 
 	otherProfileService := brand.KeyringService
 	if !IsDev {

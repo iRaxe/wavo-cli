@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
 	"github.com/iRaxe/wavo-cli/internal/lock"
 	"github.com/iRaxe/wavo-cli/internal/output"
@@ -14,7 +15,7 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// Plural: `chatwoot convs` — list conversations.
+// Plural: `wavo convs` — list conversations.
 // -----------------------------------------------------------------------------
 
 type ConvsCmd struct {
@@ -71,7 +72,7 @@ func (c *ConvsCmd) Run(app *App) error {
 }
 
 // -----------------------------------------------------------------------------
-// Singular: `chatwoot conv <verb> <id> ...` — context for one conversation.
+// Singular: `wavo conv <verb> <id> ...` — context for one conversation.
 // -----------------------------------------------------------------------------
 
 type ConvCmd struct {
@@ -189,7 +190,7 @@ func (c *ConvMessagesCmd) Run(app *App) error {
 // -- per-conversation lock ----------------------------------------------------
 
 // withConvLock runs fn while holding the per-conversation lock, so concurrent
-// chatwoot processes can't mutate the same conversation at once. If another
+// wavo processes can't mutate the same conversation at once. If another
 // process holds the lock, it fails fast instead of waiting: a queued duplicate
 // would still fire after the holder finishes, which is exactly what the lock
 // exists to prevent.
@@ -197,7 +198,7 @@ func withConvLock(id int, fn func() error) error {
 	lk, err := lock.AcquireConversation(id)
 	if err != nil {
 		if errors.Is(err, lock.ErrLocked) {
-			return fmt.Errorf("conversation %d: another chatwoot command is already running on this conversation; try again in a moment", id)
+			return fmt.Errorf("conversation %d: another %s command is already running on this conversation; try again in a moment", id, brand.Command)
 		}
 		return err
 	}
@@ -474,7 +475,7 @@ func (c *ConvContactCmd) Run(app *App) error {
 // Helpers.
 // -----------------------------------------------------------------------------
 
-var errResolveAgentProfile = errors.New("profile request to Wavo failed; retry the command or run 'wavo auth login'")
+var errResolveAgentProfile = errors.New("profile request to " + brand.Product + " failed; retry the command or run '" + brand.Command + " auth login'")
 
 func resolveAgent(app *App, ref string) (int, error) {
 	ref = strings.TrimSpace(ref)
@@ -503,7 +504,7 @@ func resolveAgent(app *App, ref string) (int, error) {
 			return nil
 		})
 		if err != nil {
-			return 0, fmt.Errorf("cannot safely resolve 'me' for the current Wavo login; retry the command: %w", err)
+			return 0, fmt.Errorf("cannot safely resolve 'me' for the current %s login; retry the command: %w", brand.Product, err)
 		}
 		app.Config = updated
 		return profile.ID, nil

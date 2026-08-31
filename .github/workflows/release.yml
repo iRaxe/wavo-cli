@@ -23,6 +23,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Wavo branding gate
+        run: |
+          ./scripts/check-branding.sh
+          ./scripts/check-branding-test.sh
+          ./scripts/update-swagger-test.sh
+          mkdir -p ./bin
+          go build -trimpath -o ./bin/wavo ./cmd/wavo
+          ./scripts/check-branding.sh ./bin/wavo
+
       - name: go vet
         run: go vet ./...
 

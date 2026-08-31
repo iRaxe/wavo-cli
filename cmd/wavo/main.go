@@ -17,7 +17,7 @@ import (
 
 var version = "dev"
 
-// id-first dispatch: users say `chatwoot conv 123 reply "hi"` but Kong
+// id-first dispatch: users say `wavo conv 123 reply "hi"` but Kong
 // can't have arg:"" siblings to cmd:"". rewriteIDFirstGrammar swaps the id
 // and verb tokens so Kong sees its preferred verb-first form.
 var (
@@ -43,16 +43,7 @@ func main() {
 	args = rewriteIDFirstGrammar(args)
 
 	var cli cmd.CLI
-	parser := kong.Must(&cli,
-		kong.Name(brand.Command),
-		kong.Description("CLI for "+brand.Product+"."),
-		kong.Vars{"version": version},
-		kong.UsageOnError(),
-		kong.Help(idFirstHelpPrinter),
-	)
-
-	// Enable shell completions (must be called before Parse)
-	kongcompletion.Register(parser)
+	parser := newParser(&cli)
 
 	ctx, err := parser.Parse(args)
 	parser.FatalIfErrorf(err)
@@ -78,6 +69,20 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func newParser(cli *cmd.CLI) *kong.Kong {
+	parser := kong.Must(cli,
+		kong.Name(brand.Command),
+		kong.Description("CLI for "+brand.Product+"."),
+		kong.Vars{"version": version},
+		kong.UsageOnError(),
+		kong.Help(idFirstHelpPrinter),
+	)
+
+	// Enable shell completions (must be called before Parse)
+	kongcompletion.Register(parser)
+	return parser
 }
 
 // rewriteIDFirstGrammar swaps `<noun> <id> <verb>` to `<noun> <verb> <id>`

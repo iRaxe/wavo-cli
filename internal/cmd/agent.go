@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// AgentsCmd is `chatwoot agents` — list agents on the account.
+// AgentsCmd is `wavo agents` — list agents on the account.
 type AgentsCmd struct{}
 
 func (c *AgentsCmd) Run(app *App) error {

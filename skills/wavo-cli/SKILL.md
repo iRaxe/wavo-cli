@@ -1,22 +1,22 @@
 ---
-name: chatwoot-cli
+name: wavo-cli
 description: >
-  Operate Chatwoot helpdesks from the terminal — list and triage conversations,
+  Operate Wavo helpdesks from the terminal — list and triage conversations,
   send replies and private notes, assign agents and teams, change status, set
   labels and priority, search contacts, inspect inboxes, and search help
-  center articles via the `chatwoot` CLI. Use when the user wants to read,
-  summarize, or act on Chatwoot conversations or help center content from the
+  center articles via the `wavo` CLI. Use when the user wants to read,
+  summarize, or act on Wavo conversations or help center content from the
   shell, scripts, agent workflows, or CI. Always load this skill before running
-  `chatwoot` commands — it contains the noun/verb grammar, the output-format
+  `wavo` commands — it contains the noun/verb grammar, the output-format
   contract, and the safety rules that prevent customer-visible mistakes.
 license: MIT
 metadata:
-  author: chatwoot
-  homepage: https://www.chatwoot.com
-  source: https://github.com/chatwoot/cli
+  author: iRaxe
+  homepage: https://my.wavo.it
+  source: https://github.com/iRaxe/wavo-cli
 ---
 
-# Chatwoot CLI
+# Wavo CLI
 
 ## Agent Protocol
 
@@ -28,22 +28,28 @@ explicitly.
 - Pass `-o json` whenever you need to parse output. Pipe to `jq` — never
   grep the text format.
 - Pass `-q` (quiet) for ID-only output, one per line, suitable for piping to
-  `xargs` or chaining `chatwoot` invocations.
+  `xargs` or chaining `wavo` invocations.
 - Default text output is for humans only; treat it as opaque.
 - Exit `0` = success, non-zero = error. Errors go to stderr.
-- Authenticate via the OS keyring (`chatwoot auth login`) for local use, or
-  the `CHATWOOT_API_KEY` env var for CI / agent / headless contexts. Never
+- Authenticate via the OS keyring (`wavo auth login`) for local use, or
+  the `WAVO_API_KEY` env var for CI / agent / headless contexts. Never
   rely on interactive prompts in scripts.
-- `chatwoot auth login` is interactive (prompts for base URL, API key,
+- `wavo auth login` is interactive (prompts for base URL, API key,
   account ID). If invoked headlessly it will fail — surface the env-var path
   instead.
-- Prefer first-class commands over `chatwoot api`. Use raw API calls only when
+- Prefer first-class commands over `wavo api`. Use raw API calls only when
   no command exists or the user explicitly asks for an endpoint-level call.
 - Use help center lookup only when the user asks for help center content,
   article search, or knowledge-base context. Do not make it the default step
   for ordinary conversation triage.
-- Before raw API calls, check the application Swagger:
-  https://raw.githubusercontent.com/chatwoot/chatwoot/develop/swagger/tag_groups/application_swagger.json
+- Before raw API calls, check the bundled application Swagger at
+  `internal/sdk/testdata/application_swagger.json`. Ordinary users should use
+  this pinned contract. Maintainers can refresh it from a local Wavo source
+  checkout by setting `WAVO_SOURCE_DIR` to the exact Git toplevel of a checkout
+  with the canonical iRaxe/myWavo GitHub remote, then running
+  `mise run sdk:update-swagger`. The updater validates the contract before an
+  atomic replacement and requires Go installed in a standard system location;
+  it never uses caller-provided PATH tools.
 - Use `-v` (verbose) to see the underlying HTTP request/response when
   debugging an unexpected result.
 
@@ -77,9 +83,9 @@ one of three shapes:**
 
 | Shape                              | Meaning              | Example                              |
 |------------------------------------|----------------------|--------------------------------------|
-| `<plural-noun>`                    | list                 | `chatwoot convs`, `chatwoot contacts`|
-| `<singular-noun> <id>`             | view (shorthand)     | `chatwoot conv 123`                  |
-| `<singular-noun> <id> <verb> [..]` | act on one resource  | `chatwoot conv 123 reply "hi"`       |
+| `<plural-noun>`                    | list                 | `wavo convs`, `wavo contacts`|
+| `<singular-noun> <id>`             | view (shorthand)     | `wavo conv 123`                  |
+| `<singular-noun> <id> <verb> [..]` | act on one resource  | `wavo conv 123 reply "hi"`       |
 
 Nouns: `conv`/`convs`, `contact`/`contacts`, `inbox`/`inboxes`, `agents`,
 `labels`, `teams`. The id always comes **before** the verb. See "Available
@@ -87,9 +93,9 @@ Commands" below for the full verb list.
 
 When unsure, ask the CLI:
 ```bash
-chatwoot --help
-chatwoot conv --help          # all verbs on a conversation
-chatwoot convs --help         # filters for the list command
+wavo --help
+wavo conv --help          # all verbs on a conversation
+wavo convs --help         # filters for the list command
 ```
 
 ## Global Flags
@@ -129,7 +135,7 @@ chatwoot convs --help         # filters for the list command
 | `hc articles [--query text]`     | List/search help center articles                  |
 | `hc article <article-slug>`      | Fetch one help center article                     |
 | `me` / `whoami` / `auth status`  | Show current identity                             |
-| `api <path>`                      | Call an arbitrary Chatwoot API endpoint with saved auth headers |
+| `api <path>`                      | Call an arbitrary Wavo API endpoint with saved auth headers |
 | `auth login` / `logout`          | Interactive login / remove credentials            |
 | `config path` / `config view`    | Inspect config file location and contents         |
 | `completion <shell>`             | Print shell-completion script                     |
@@ -139,14 +145,14 @@ chatwoot convs --help         # filters for the list command
 | # | Mistake | Fix |
 |---|---------|-----|
 | 1 | **Parsing default text output** | Text format is for humans and can change. Always pass `-o json` (or `-q` for IDs only) when an agent will consume the output. |
-| 2 | **Forgetting `convs` defaults to your open queue** | `chatwoot convs` is implicitly `--assignee me -s open`. Pass `--assignee all` and the relevant `-s` (one of `open`, `pending`, `resolved`, `snoozed`) when you mean "everything". |
-| 3 | **`label` is replace, not append** | `chatwoot conv 123 label foo` removes any existing labels other than `foo`. To add one label, fetch existing first: `chatwoot conv 123 -o json \| jq -r '.labels // [] \| join(",")'`, then pass the full set. See "Append a label" below — running the `label` command with an empty `$existing` (e.g. on fetch failure) silently strips every label, so use `set -o pipefail` and verify before re-setting. |
+| 2 | **Forgetting `convs` defaults to your open queue** | `wavo convs` is implicitly `--assignee me -s open`. Pass `--assignee all` and the relevant `-s` (one of `open`, `pending`, `resolved`, `snoozed`) when you mean "everything". |
+| 3 | **`label` is replace, not append** | `wavo conv 123 label foo` removes any existing labels other than `foo`. To add one label, fetch existing first: `wavo conv 123 -o json \| jq -r '.labels // [] \| join(",")'`, then pass the full set. See "Append a label" below — running the `label` command with an empty `$existing` (e.g. on fetch failure) silently strips every label, so use `set -o pipefail` and verify before re-setting. |
 | 4 | **Confusing `--query` with contact search** | `convs --query` searches **message content**. To find a contact by name/email/phone, use `contacts --search`. |
-| 5 | **Ambiguous `--agent <name>`** | `assign --agent <name>` matches a case-insensitive **substring** — risky when names overlap. Prefer agent IDs in scripts; run `chatwoot agents -o json` first to resolve. |
+| 5 | **Ambiguous `--agent <name>`** | `assign --agent <name>` matches a case-insensitive **substring** — risky when names overlap. Prefer agent IDs in scripts; run `wavo agents -o json` first to resolve. |
 | 6 | **`-l a -l b` as repeated flags** | Labels are comma-separated on a single flag: `-l a,b`. Repeating the flag won't merge them. |
 | 7 | **Assuming list = all** | List commands return one page. Inspect `meta` in `-o json` (and use `-p N` to advance) before assuming completeness. |
 | 8 | **Snooze without `--until` is not "forever"** | Bare `snooze` snoozes until the customer's next reply, not indefinitely. Pass `--until 7d` or an absolute date for a fixed window. |
-| 9 | **Running `auth login` in a script** | Interactive only — fails in non-TTY contexts. Use `CHATWOOT_API_KEY` plus the saved `~/.chatwoot/config.yaml` (or `-a` to override account). |
+| 9 | **Running `auth login` in a script** | Interactive only — fails in non-TTY contexts. Use `WAVO_API_KEY` plus the saved `~/.wavo/config.yaml` (or `-a` to override account). |
 
 ## Safety — customer-visible writes
 
@@ -183,50 +189,52 @@ For straight verb usage, the Available Commands table is canonical.
 
 **List conversations** — list responses are wrapped in `.data.payload[]`:
 ```bash
-chatwoot convs --assignee me -s open -o json \
+wavo convs --assignee me -s open -o json \
   | jq '.data.payload[] | {id, contact: .meta.sender.name, last: .messages[-1].content}'
 
-chatwoot convs --query "refund" --assignee all -s open -q   # IDs only
+wavo convs --query "refund" --assignee all -s open -q   # IDs only
 ```
 
 **Read recent messages** — `message_type`: `0` customer, `1` agent, `2` activity, `3` template:
 ```bash
-chatwoot conv 123 messages -o json \
+wavo conv 123 messages -o json \
   | jq '.payload[-5:][] | {dir: (if .message_type==0 then "in" else "out" end), private, content}'
 ```
 
 **Append a label** (`label` replaces — fetch first, then merge). `set -o pipefail` is required so a failed fetch surfaces instead of silently producing an empty `$existing`, which would clear every label on the next line:
 ```bash
 set -o pipefail
-existing=$(chatwoot conv 123 -o json | jq -r '.labels // [] | join(",")')
-chatwoot conv 123 label "${existing:+$existing,}billing"
+existing=$(wavo conv 123 -o json | jq -r '.labels // [] | join(",")')
+wavo conv 123 label "${existing:+$existing,}billing"
 ```
 
 **Bulk via `-q | xargs`:**
 ```bash
-chatwoot convs -l spam -q | xargs -I{} chatwoot conv {} resolve
+wavo convs -l spam -q | xargs -I{} wavo conv {} resolve
 ```
 
 **Chain contact → conversations:**
 ```bash
-id=$(chatwoot contacts --search "jane@example.com" -o json | jq '.payload[0].id')
-chatwoot contact "$id" conversations -o json
+id=$(wavo contacts --search "jane@example.com" -o json | jq '.payload[0].id')
+wavo contact "$id" conversations -o json
 ```
 
 **Help center lookup** — set a default portal once, then search/fetch articles:
 ```bash
-chatwoot hcs -o json
-chatwoot hc default chatwoot-help-center
-chatwoot hc articles --query "account" -o json
-chatwoot hc articles --category getting-started -o json
-chatwoot hc article create-a-chatwoot-account -o json
+wavo hcs -o json
+wavo hc default wavo-help-center
+wavo hc articles --query "account" -o json
+wavo hc articles --category getting-started -o json
+wavo hc article create-a-wavo-account -o json
 ```
 
 **Raw API call** — account-relative paths are expanded under `/api/v1/accounts/<account_id>`, so do not include the `/api/v1/accounts/...` prefix:
 ```bash
-chatwoot api /conversations/123 -o json
-chatwoot api -X PATCH /conversations/123 --data '{"status":"open"}'
+wavo api /conversations/123 -o json
+wavo api -X PATCH /conversations/123 --data '{"status":"open"}'
 ```
 
-Use the application Swagger as the endpoint reference before raw API calls:
-https://raw.githubusercontent.com/chatwoot/chatwoot/develop/swagger/tag_groups/application_swagger.json
+Use the bundled `internal/sdk/testdata/application_swagger.json` contract as
+the endpoint reference before raw API calls. To refresh it, maintainers set
+`WAVO_SOURCE_DIR` to the exact Git toplevel of a local checkout with the
+canonical iRaxe/myWavo GitHub remote and run `mise run sdk:update-swagger`.

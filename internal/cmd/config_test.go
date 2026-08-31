@@ -12,13 +12,13 @@ import (
 
 func TestConfigViewReportsCredentialSourceWithoutToken(t *testing.T) {
 	keyring.MockInit()
-	if err := keyring.DeleteAll("chatwoot-cli"); err != nil {
+	if err := keyring.DeleteAll("wavo-cli"); err != nil {
 		t.Fatalf("DeleteAll() error = %v", err)
 	}
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv(config.APIKeyEnv, "")
 
-	cfg := &config.Config{BaseURL: "https://app.chatwoot.com", AccountID: 123}
+	cfg := &config.Config{BaseURL: "https://wavo.example", AccountID: 123}
 	if err := config.Save(cfg); err != nil {
 		t.Fatalf("config.Save() error = %v", err)
 	}

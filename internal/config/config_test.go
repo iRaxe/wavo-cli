@@ -117,7 +117,7 @@ func TestSaveOmitsAPIKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	cfg := &Config{
-		BaseURL:   "https://app.chatwoot.com",
+		BaseURL:   "https://wavo.example",
 		AccountID: 123,
 	}
 
@@ -148,10 +148,10 @@ func TestSaveAndLoadHelpCenterDefaults(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
 	cfg := &Config{
-		BaseURL:   "https://app.chatwoot.com",
+		BaseURL:   "https://wavo.example",
 		AccountID: 123,
 		HelpCenter: HelpCenterConfig{
-			DefaultPortalSlug: "chatwoot-help-center",
+			DefaultPortalSlug: "wavo-help-center",
 			DefaultLocale:     "en",
 		},
 	}
@@ -164,8 +164,8 @@ func TestSaveAndLoadHelpCenterDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if loaded.HelpCenter.DefaultPortalSlug != "chatwoot-help-center" {
-		t.Fatalf("DefaultPortalSlug = %q, want chatwoot-help-center", loaded.HelpCenter.DefaultPortalSlug)
+	if loaded.HelpCenter.DefaultPortalSlug != "wavo-help-center" {
+		t.Fatalf("DefaultPortalSlug = %q, want wavo-help-center", loaded.HelpCenter.DefaultPortalSlug)
 	}
 	if loaded.HelpCenter.DefaultLocale != "en" {
 		t.Fatalf("DefaultLocale = %q, want en", loaded.HelpCenter.DefaultLocale)
@@ -180,7 +180,7 @@ func TestSaveAndLoadHelpCenterDefaults(t *testing.T) {
 		t.Fatalf("ReadFile() error = %v", err)
 	}
 	content := string(data)
-	for _, want := range []string{"help_center:", "default_portal_slug: chatwoot-help-center", "default_locale: en"} {
+	for _, want := range []string{"help_center:", "default_portal_slug: wavo-help-center", "default_locale: en"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("saved config missing %q: %s", want, content)
 		}
@@ -205,7 +205,7 @@ func TestLegacyAPIKeyIsIgnoredAndRemovedOnSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigPath() error = %v", err)
 	}
-	legacy := "base_url: https://app.chatwoot.com\napi_key: plaintext-token\naccount_id: 123\n"
+	legacy := "base_url: https://wavo.example\napi_key: plaintext-token\naccount_id: 123\n"
 	if err := os.WriteFile(path, []byte(legacy), 0600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}

@@ -1,16 +1,16 @@
 # See https://goreleaser.com for full reference.
 version: 2
 
-project_name: chatwoot
+project_name: wavo
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: chatwoot
-    main: ./cmd/chatwoot
-    binary: chatwoot
+  - id: wavo
+    main: ./cmd/wavo
+    binary: wavo
     env:
       - CGO_ENABLED=0
     goos:
@@ -28,7 +28,7 @@ archives:
   - id: default
     formats: [tar.gz]
     # Names match what `uname -s`/`uname -m` produce so install.sh can map
-    # platform → asset directly: chatwoot_0.1.0_Darwin_arm64.tar.gz, etc.
+    # platform → asset directly: wavo_0.1.0_Darwin_arm64.tar.gz, etc.
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_
       {{- if eq .Os "darwin" }}Darwin
@@ -42,6 +42,7 @@ archives:
         formats: [zip]
     files:
       - LICENSE
+      - NOTICE.md
       - README.md
 
 checksum:
@@ -67,8 +68,8 @@ changelog:
 
 release:
   github:
-    owner: chatwoot
-    name: cli
+    owner: iRaxe
+    name: wavo-cli
   draft: false
   prerelease: auto
   mode: replace

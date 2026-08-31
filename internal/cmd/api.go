@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/output"
 )
 
@@ -23,15 +24,15 @@ type ApiCmd struct {
 }
 
 func (c *ApiCmd) Help() string {
-	return `Account-relative paths such as /conversations/123 are expanded under
+	return fmt.Sprintf(`Account-relative paths such as /conversations/123 are expanded under
 /api/v1/accounts/<account_id>. Use --exact for non-account-scoped paths.
 
 The default method is GET, or POST when --data is provided. Override with -X.
 
 Examples:
-  chatwoot api /conversations/123
-  chatwoot api -X PATCH /conversations/123 --data '{"status":"open"}'
-  chatwoot api --exact /api/v1/profile`
+  %[1]s api /conversations/123
+  %[1]s api -X PATCH /conversations/123 --data '{"status":"open"}'
+  %[1]s api --exact /api/v1/profile`, brand.Command)
 }
 
 func (c *ApiCmd) Run(app *App) error {
@@ -78,7 +79,7 @@ func normalizeAPIPath(path string, exact bool) (string, bool, error) {
 		return "", false, fmt.Errorf("invalid path: %w", err)
 	}
 	if parsed.IsAbs() {
-		return "", false, fmt.Errorf("absolute URLs are not supported; pass a path under the configured Chatwoot base URL")
+		return "", false, fmt.Errorf("absolute URLs are not supported; pass a path under the configured %s base URL", brand.Product)
 	}
 
 	if !strings.HasPrefix(path, "/") {

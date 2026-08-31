@@ -27,11 +27,11 @@ type AuthCmd struct {
 type AuthLoginCmd struct{}
 
 var (
-	errLoginProfile            = errors.New("authentication for Wavo failed; verify credentials or run 'wavo auth login'")
-	errStatusProfile           = errors.New("profile request to Wavo failed; check availability or run 'wavo auth login'")
-	errLoginPromptWrite        = errors.New("failed to write Wavo login prompt")
-	errLoginResultWrite        = errors.New("failed to write Wavo login result")
-	errWorkspaceSelectionWrite = errors.New("failed to write Wavo workspace selection")
+	errLoginProfile            = errors.New("authentication for " + brand.Product + " failed; verify credentials or run '" + brand.Command + " auth login'")
+	errStatusProfile           = errors.New("profile request to " + brand.Product + " failed; check availability or run '" + brand.Command + " auth login'")
+	errLoginPromptWrite        = errors.New("failed to write " + brand.Product + " login prompt")
+	errLoginResultWrite        = errors.New("failed to write " + brand.Product + " login result")
+	errWorkspaceSelectionWrite = errors.New("failed to write " + brand.Product + " workspace selection")
 )
 
 func (c *AuthLoginCmd) Run(app *App) error {
@@ -45,7 +45,7 @@ func (c *AuthLoginCmd) Run(app *App) error {
 func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHTTP bool, readToken func() (string, error)) error {
 	bufferedReader := bufio.NewReader(reader)
 
-	if _, err := fmt.Fprintln(writer, "Wavo CLI Login"); err != nil {
+	if _, err := fmt.Fprintf(writer, "%s CLI Login\n", brand.Product); err != nil {
 		return errLoginPromptWrite
 	}
 	if _, err := fmt.Fprintln(writer, "=============="); err != nil {
@@ -108,7 +108,7 @@ func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHT
 func persistLogin(cfg *config.Config, apiKey string) error {
 	authLock, err := lock.AcquireAuth()
 	if err != nil {
-		return fmt.Errorf("failed to persist Wavo login: %w", err)
+		return fmt.Errorf("failed to persist %s login: %w", brand.Product, err)
 	}
 	defer authLock.Release()
 
@@ -119,7 +119,7 @@ func persistLogin(cfg *config.Config, apiKey string) error {
 
 	if err := config.Save(cfg); err != nil {
 		if rollbackErr := rollbackCredential(); rollbackErr != nil {
-			return fmt.Errorf("failed to save config: %w (also failed to restore the previous Wavo credential: %v)", err, rollbackErr)
+			return fmt.Errorf("failed to save config: %w (also failed to restore the previous %s credential: %v)", err, brand.Product, rollbackErr)
 		}
 		return fmt.Errorf("failed to save config: %w", err)
 	}
@@ -162,7 +162,7 @@ func selectAccount(reader io.Reader, accounts []profileDisplayAccount, fallbackI
 		if fallbackID > 0 {
 			return fallbackID, nil
 		}
-		return 0, fmt.Errorf("authenticated Wavo profile has no accessible workspace")
+		return 0, fmt.Errorf("authenticated %s profile has no accessible workspace", brand.Product)
 	case 1:
 		return accounts[0].ID, nil
 	}
@@ -241,13 +241,13 @@ func loginSuccessMessage(name, email string) string {
 // profile lists it, or its fallback account_id matches for older instances.
 func verifyAccountAccess(profile *sdk.ProfileResponse, accountID int) error {
 	if accountID <= 0 {
-		return fmt.Errorf("authenticated Wavo profile returned an invalid workspace ID")
+		return fmt.Errorf("authenticated %s profile returned an invalid workspace ID", brand.Product)
 	}
 	if len(profile.Accounts) == 0 {
 		if profile.AccountID == accountID {
 			return nil
 		}
-		return fmt.Errorf("workspace %d is not available in the authenticated Wavo profile", accountID)
+		return fmt.Errorf("workspace %d is not available in the authenticated %s profile", accountID, brand.Product)
 	}
 	for _, acc := range profile.Accounts {
 		if acc.ID == accountID {
@@ -297,7 +297,7 @@ type AuthLogoutCmd struct{}
 func (c *AuthLogoutCmd) Run(app *App) error {
 	authLock, err := lock.AcquireAuth()
 	if err != nil {
-		return fmt.Errorf("failed to update Wavo authentication: %w", err)
+		return fmt.Errorf("failed to update %s authentication: %w", brand.Product, err)
 	}
 	defer authLock.Release()
 
@@ -318,7 +318,7 @@ func (c *AuthLogoutCmd) Run(app *App) error {
 			}
 			return nil
 		}
-		return fmt.Errorf("credentials for Wavo were removed, but the config file could not be removed: %w", err)
+		return fmt.Errorf("credentials for %s were removed, but the config file could not be removed: %w", brand.Product, err)
 	}
 
 	fmt.Println("Logged out successfully.")
@@ -342,7 +342,7 @@ func runAuthStatus(app *App) error {
 	}
 
 	if cfg == nil || !cfg.IsValid() {
-		_, err := fmt.Fprintln(app.Printer.Writer, "Not logged in. Run 'wavo auth login' to authenticate.")
+		_, err := fmt.Fprintf(app.Printer.Writer, "Not logged in. Run '%s auth login' to authenticate.\n", brand.Command)
 		return err
 	}
 
@@ -362,7 +362,7 @@ func runAuthStatus(app *App) error {
 	// temporary overrides and must not rewrite the persisted login identity.
 	if source == config.CredentialSourceKeyring && cfg.UserID != profile.ID {
 		if err := refreshCachedUserID(cfg, profile.ID); err != nil {
-			return fmt.Errorf("failed to update Wavo authentication status: %w", err)
+			return fmt.Errorf("failed to update %s authentication status: %w", brand.Product, err)
 		}
 	}
 

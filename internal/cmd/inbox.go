@@ -8,7 +8,7 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// Plural: `chatwoot inboxes` — list inboxes.
+// Plural: `wavo inboxes` — list inboxes.
 // -----------------------------------------------------------------------------
 
 type InboxesCmd struct{}
@@ -44,7 +44,7 @@ func (c *InboxesCmd) Run(app *App) error {
 }
 
 // -----------------------------------------------------------------------------
-// Singular: `chatwoot inbox <id>` — view one inbox.
+// Singular: `wavo inbox <id>` — view one inbox.
 // -----------------------------------------------------------------------------
 
 type InboxCmd struct {

@@ -1,16 +1,67 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/iRaxe/wavo-cli/internal/cmd"
 	"github.com/iRaxe/wavo-cli/internal/config"
 	"github.com/zalando/go-keyring"
 )
+
+func TestParserHelpUsesWavoBranding(t *testing.T) {
+	var cli cmd.CLI
+	parser := newParser(&cli)
+	var stdout bytes.Buffer
+	parser.Stdout = &stdout
+	errHelp := errors.New("help requested")
+	parser.Exit = func(code int) {
+		if code != 0 {
+			t.Fatalf("help exit code = %d, want 0", code)
+		}
+		panic(errHelp)
+	}
+
+	var err error
+	func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				var ok bool
+				err, ok = recovered.(error)
+				if !ok {
+					panic(recovered)
+				}
+			}
+		}()
+		_, err = parser.Parse([]string{"--help"})
+	}()
+	if !errors.Is(err, errHelp) {
+		t.Fatalf("Parse(--help) error = %v, want help sentinel", err)
+	}
+	helpOutput := stdout.String()
+	for _, want := range []string{
+		"Usage: wavo <command>",
+		"CLI for Wavo.",
+		"conv (conversation) <id> reply <text>",
+	} {
+		if !strings.Contains(helpOutput, want) {
+			t.Fatalf("help does not contain %q:\n%s", want, helpOutput)
+		}
+	}
+	help := strings.ToLower(helpOutput)
+	for _, forbidden := range []string{"chat" + "woot", "chwt" + ".app"} {
+		if strings.Contains(help, forbidden) {
+			t.Fatalf("help contains forbidden upstream branding %q:\n%s", forbidden, stdout.String())
+		}
+	}
+}
 
 func TestRewriteIDFirstGrammar(t *testing.T) {
 	cases := []struct {
@@ -106,7 +157,7 @@ func TestRewriteIDFirstGrammarDoesNotMutateInput(t *testing.T) {
 
 func TestAssignMeAccountOverrideSmoke(t *testing.T) {
 	keyring.MockInit()
-	if err := keyring.DeleteAll("chatwoot-cli"); err != nil {
+	if err := keyring.DeleteAll("wavo-cli"); err != nil {
 		t.Fatalf("keyring.DeleteAll: %v", err)
 	}
 	t.Setenv("HOME", t.TempDir())
@@ -142,7 +193,7 @@ func TestAssignMeAccountOverrideSmoke(t *testing.T) {
 	}
 
 	oldArgs := os.Args
-	os.Args = []string{"chatwoot", "-a", "2", "conv", "assign", "123", "--agent", "me"}
+	os.Args = []string{"wavo", "-a", "2", "conv", "assign", "123", "--agent", "me"}
 	t.Cleanup(func() { os.Args = oldArgs })
 
 	main()

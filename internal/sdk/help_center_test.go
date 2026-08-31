@@ -20,8 +20,8 @@ func TestHelpCenterListPortalsCallsAccountEndpoint(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"payload": [{
 				"id": 1,
-				"name": "Chatwoot Help Center",
-				"slug": "chatwoot-help-center",
+				"name": "Wavo Help Center",
+				"slug": "wavo-help-center",
 				"config": {
 					"default_locale": "en",
 					"allowed_locales": [{"code": "en", "articles_count": 12, "categories_count": 3}]
@@ -38,14 +38,14 @@ func TestHelpCenterListPortalsCallsAccountEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPortals returned error: %v", err)
 	}
-	if len(resp.Payload) != 1 || resp.Payload[0].Slug != "chatwoot-help-center" {
+	if len(resp.Payload) != 1 || resp.Payload[0].Slug != "wavo-help-center" {
 		t.Fatalf("unexpected portals response: %#v", resp)
 	}
 }
 
 func TestHelpCenterListArticlesBuildsPublicSearchURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/hc/chatwoot-help-center/en/categories/getting-started/articles.json" {
+		if r.URL.Path != "/hc/wavo-help-center/en/categories/getting-started/articles.json" {
 			http.Error(w, "unexpected path: "+r.URL.Path, http.StatusNotFound)
 			return
 		}
@@ -64,9 +64,9 @@ func TestHelpCenterListArticlesBuildsPublicSearchURL(t *testing.T) {
 			"payload": [{
 				"id": 123,
 				"category_id": 4,
-				"title": "Create a Chatwoot Account",
+				"title": "Create a Wavo Account",
 				"content": "You can create an account from settings.",
-				"link": "hc/chatwoot-help-center/articles/create-a-chatwoot-account"
+				"link": "hc/wavo-help-center/articles/create-a-wavo-account"
 			}],
 			"meta": {"articles_count": 60}
 		}`))
@@ -75,7 +75,7 @@ func TestHelpCenterListArticlesBuildsPublicSearchURL(t *testing.T) {
 
 	client := NewClient(server.URL, "test-token", 9, WithHTTPClient(server.Client()))
 	resp, err := client.HelpCenter().ListArticles(HelpCenterArticlesOptions{
-		PortalSlug:   "chatwoot-help-center",
+		PortalSlug:   "wavo-help-center",
 		Locale:       "en",
 		CategorySlug: "getting-started",
 		Query:        "sync account",
@@ -88,14 +88,14 @@ func TestHelpCenterListArticlesBuildsPublicSearchURL(t *testing.T) {
 	if resp.Meta.ArticlesCount != 60 {
 		t.Fatalf("articles_count = %d, want 60", resp.Meta.ArticlesCount)
 	}
-	if len(resp.Payload) != 1 || resp.Payload[0].Title != "Create a Chatwoot Account" {
+	if len(resp.Payload) != 1 || resp.Payload[0].Title != "Create a Wavo Account" {
 		t.Fatalf("unexpected articles response: %#v", resp)
 	}
 }
 
 func TestHelpCenterListArticlesOmitsDefaultPagination(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/hc/chatwoot-help-center/en/articles.json" {
+		if r.URL.Path != "/hc/wavo-help-center/en/articles.json" {
 			http.Error(w, "unexpected path: "+r.URL.Path, http.StatusNotFound)
 			return
 		}
@@ -110,7 +110,7 @@ func TestHelpCenterListArticlesOmitsDefaultPagination(t *testing.T) {
 
 	client := NewClient(server.URL, "test-token", 9, WithHTTPClient(server.Client()))
 	if _, err := client.HelpCenter().ListArticles(HelpCenterArticlesOptions{
-		PortalSlug: "chatwoot-help-center",
+		PortalSlug: "wavo-help-center",
 		Locale:     "en",
 		Page:       1,
 	}); err != nil {
@@ -120,7 +120,7 @@ func TestHelpCenterListArticlesOmitsDefaultPagination(t *testing.T) {
 
 func TestHelpCenterGetArticleBuildsPublicArticleURL(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/hc/chatwoot-help-center/articles/create-a-chatwoot-account.json" {
+		if r.URL.Path != "/hc/wavo-help-center/articles/create-a-wavo-account.json" {
 			http.Error(w, "unexpected path: "+r.URL.Path, http.StatusNotFound)
 			return
 		}
@@ -129,21 +129,21 @@ func TestHelpCenterGetArticleBuildsPublicArticleURL(t *testing.T) {
 		_, _ = w.Write([]byte(`{
 			"id": 123,
 			"category_id": 4,
-			"title": "Create a Chatwoot Account",
-			"slug": "create-a-chatwoot-account",
+			"title": "Create a Wavo Account",
+			"slug": "create-a-wavo-account",
 			"content": "Full article body",
 			"views": 25,
-			"link": "hc/chatwoot-help-center/articles/create-a-chatwoot-account"
+			"link": "hc/wavo-help-center/articles/create-a-wavo-account"
 		}`))
 	}))
 	t.Cleanup(server.Close)
 
 	client := NewClient(server.URL, "test-token", 9, WithHTTPClient(server.Client()))
-	article, err := client.HelpCenter().GetArticle("chatwoot-help-center", "create-a-chatwoot-account")
+	article, err := client.HelpCenter().GetArticle("wavo-help-center", "create-a-wavo-account")
 	if err != nil {
 		t.Fatalf("GetArticle returned error: %v", err)
 	}
-	if article.ID != 123 || article.Slug != "create-a-chatwoot-account" {
+	if article.ID != 123 || article.Slug != "create-a-wavo-account" {
 		t.Fatalf("unexpected article: %#v", article)
 	}
 }

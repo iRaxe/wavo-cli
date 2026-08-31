@@ -29,7 +29,7 @@ Root CLI command and help. Provides:
 Authentication setup.
 - `auth login` — save non-secret config to YAML and API token to OS keyring
 - `auth logout` — clear saved config and keyring token
-- `CHATWOOT_API_KEY` overrides saved keyring credentials for CI, coding agents, and temporary sessions
+- `WAVO_API_KEY` overrides saved keyring credentials for CI, coding agents, and temporary sessions
 
 ### config.go
 Configuration management.
@@ -104,19 +104,19 @@ Set via `--format json` or `--format csv` on any command.
 
 ```bash
 # List conversations
-./chatwoot conversation list --assignee-type me --status open
+./wavo conversation list --assignee-type me --status open
 
 # Get single conversation
-./chatwoot conversation get 123
+./wavo conversation get 123
 
 # List messages in conversation
-./chatwoot message list 123
+./wavo message list 123
 
 # Get contact details
-./chatwoot contact get 456
+./wavo contact get 456
 
 # Show authenticated user
-./chatwoot profile show --format json
+./wavo profile show --format json
 ```
 
 ## skipAuth Flag

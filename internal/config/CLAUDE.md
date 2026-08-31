@@ -1,20 +1,20 @@
 # internal/config - Configuration Management
 
-YAML-based configuration persistence for non-secret account settings. Configuration is stored in `~/.chatwoot/config.yaml` and auto-loaded on startup. API keys are resolved from `CHATWOOT_API_KEY` first, then the OS keyring.
+YAML-based configuration persistence for non-secret account settings. Configuration is stored in `~/.wavo/config.yaml` and auto-loaded on startup. API keys are resolved from `WAVO_API_KEY` first, then the OS keyring.
 
 ## Files
 
 ### config.go
 Configuration struct and file I/O. Provides:
 - `Config` struct with BaseURL and AccountID
-- `Load()` — read from `~/.chatwoot/config.yaml`, create if missing
+- `Load()` — read from `~/.wavo/config.yaml`, create if missing
 - `Save()` — write non-secret YAML
 - Validation: ensures BaseURL and AccountID are set before API calls
 - Error handling: distinguishes between missing file and parse errors
 
 ### credentials.go
 Credential resolution and OS keyring storage. Provides:
-- `ResolveAPIKey()` — `CHATWOOT_API_KEY` first, then OS keyring
+- `ResolveAPIKey()` — `WAVO_API_KEY` first, then OS keyring
 - `SaveAPIKey()` — write validated login token to keyring
 - `DeleteAPIKey()` — remove saved keyring token on logout
 
@@ -26,8 +26,8 @@ build tag (`profile_prod.go` for `//go:build !dev`, `profile_dev.go` for
 
 | | config file | keyring service | `config.IsDev` |
 |---|---|---|---|
-| prod (default `go build`, releases) | `~/.chatwoot/config.yaml` | `chatwoot-cli` | `false` |
-| dev (`go build -tags dev`, `mise run dev`) | `~/.chatwoot/config.dev.yaml` | `chatwoot-cli-dev` | `true` |
+| prod (default `go build`, releases) | `~/.wavo/config.yaml` | `wavo-cli` | `false` |
+| dev (`go build -tags dev`, `mise run dev`) | `~/.wavo/config.dev.yaml` | `wavo-cli-dev` | `true` |
 
 A dev build keeps its own credentials, so iterating on the CLI never reads or
 clobbers the production login. The keyring **service** (not just the entry name)
@@ -40,7 +40,7 @@ out. `config view` shows a `Profile: dev` line on dev builds.
 ## Config Schema
 
 ```yaml
-base_url: https://staging.chatwoot.com
+base_url: https://my.wavo.it
 account_id: 47
 ```
 
@@ -63,8 +63,8 @@ client := sdk.NewClient(cfg.BaseURL, apiKey, cfg.AccountID)
 
 ## Validation Rules
 
-- **BaseURL** (required): full URL like `https://staging.chatwoot.com`
-- **AccountID** (required): numeric account ID from Chatwoot
+- **BaseURL** (required): full URL like `https://my.wavo.it`
+- **AccountID** (required): numeric account ID from Wavo
 
 ## File Permissions
 

@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/iRaxe/wavo-cli/internal/brand"
 )
 
-const latestReleaseURL = "https://api.github.com/repos/chatwoot/cli/releases/latest"
-
-// VersionCmd is `chatwoot version` — prints the CLI version. Equivalent to
+// VersionCmd is `wavo version` — prints the CLI version. Equivalent to
 // the `--version` flag, exposed as a subcommand for discoverability.
 type VersionCmd struct {
 	Check bool `help:"Check GitHub for a newer release."`
@@ -26,13 +26,13 @@ func (c *VersionCmd) Run(app *App) error {
 		return err
 	}
 
-	latest, err := fetchLatestRelease(latestReleaseURL)
+	latest, err := fetchLatestRelease(brand.LatestReleaseURL)
 	if err != nil {
 		return fmt.Errorf("check failed: %w", err)
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "chatwoot %s\n", displayVersion(v))
+	fmt.Fprintf(&b, "%s %s\n", brand.Command, displayVersion(v))
 	fmt.Fprintf(&b, "Latest: %s\n\n", displayVersion(latest))
 	switch {
 	case v == "dev":
@@ -41,7 +41,7 @@ func (c *VersionCmd) Run(app *App) error {
 		b.WriteString("Up to date.\n")
 	default:
 		b.WriteString("Update available.\n")
-		b.WriteString("  curl -fsSL https://chwt.app/install-cli | sh\n")
+		fmt.Fprintf(&b, "  curl -fsSL %s | sh\n", brand.InstallURL)
 	}
 	_, err = fmt.Fprint(app.Printer.Writer, b.String())
 	return err

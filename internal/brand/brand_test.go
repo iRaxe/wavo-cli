@@ -16,7 +16,7 @@ func TestProductionIdentity(t *testing.T) {
 		"base":      "https://my.wavo.it",
 		"installer": "https://my.wavo.it/install-cli",
 		"repo":      "iRaxe/wavo-cli",
-		"release":   "https://api.github.com/repos/iRaxe/wavo-cli/releases?per_page=1",
+		"release":   "https://api.github.com/repos/iRaxe/wavo-cli/releases/latest",
 		"env":       "WAVO_API_KEY", "dir": ".wavo",
 		"keyring": "wavo-cli", "dev-keyring": "wavo-cli-dev",
 	}

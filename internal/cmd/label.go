@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// LabelsCmd is `chatwoot labels` — list labels defined on the account.
+// LabelsCmd is `wavo labels` — list labels defined on the account.
 type LabelsCmd struct{}
 
 func (c *LabelsCmd) Run(app *App) error {

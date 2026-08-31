@@ -154,11 +154,11 @@ func DeleteAPIKey(_ *Config) error {
 }
 
 func missingAPIKeyError() error {
-	return fmt.Errorf("%w; run 'wavo auth login' or set %s", ErrAPIKeyNotFound, APIKeyEnv)
+	return fmt.Errorf("%w; run '%s auth login' or set %s", ErrAPIKeyNotFound, brand.Command, APIKeyEnv)
 }
 
 func credentialScopeMismatchError() error {
-	return fmt.Errorf("%w; saved keyring credential does not match configured Wavo instance; run 'wavo auth login' for this base URL and account", ErrAPIKeyNotFound)
+	return fmt.Errorf("%w; saved keyring credential does not match configured %s instance; run '%s auth login' for this base URL and account", ErrAPIKeyNotFound, brand.Product, brand.Command)
 }
 
 func normalizeBaseURL(baseURL string) string {

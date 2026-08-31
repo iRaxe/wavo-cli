@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to chatwoot-cli are documented in this file.
+All notable changes to wavo-cli are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Per-conversation lock for all mutating `conv` verbs (`reply`, `resolve`, `open`, `pending`, `snooze`, `assign`, `unassign`, `label`, `priority`): concurrent mutations of the same conversation from separate terminals now fail fast instead of both running. Locks live in `~/.chatwoot/locks/` and are released automatically by the OS if the process dies.
+- Per-conversation lock for all mutating `conv` verbs (`reply`, `resolve`, `open`, `pending`, `snooze`, `assign`, `unassign`, `label`, `priority`): concurrent mutations of the same conversation from separate terminals now fail fast instead of both running. Locks live in `~/.wavo/locks/` and are released automatically by the OS if the process dies.
 
 ### Changed
 
@@ -25,18 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Help center commands for managing portals and articles ([#15](https://github.com/chatwoot/cli/pull/15)).
+- Help center commands for managing portals and articles.
 
 ### Changed
 
-- Reworked the authentication flow ([#19](https://github.com/chatwoot/cli/pull/19)).
+- Reworked the authentication flow.
 - Updated bundled usage examples.
-- Bumped `github.com/getkin/kin-openapi` from 0.138.0 to 0.139.0 ([#18](https://github.com/chatwoot/cli/pull/18)).
-- Bumped `actions/upload-artifact` from 4 to 7 ([#17](https://github.com/chatwoot/cli/pull/17)).
+- Bumped `github.com/getkin/kin-openapi` from 0.138.0 to 0.139.0.
+- Bumped `actions/upload-artifact` from 4 to 7.
 
 ### Fixed
 
-- Hardened the install script and credential cleanup ([#14](https://github.com/chatwoot/cli/pull/14)).
+- Hardened the install script and credential cleanup.
 
 ## [0.5.0] - 2026-05-13
 
@@ -44,34 +44,34 @@ Adds a raw API escape hatch for cases where the CLI does not yet have a first-cl
 
 ### Added
 
-- **`chatwoot api` raw API command** — make authenticated Chatwoot API requests directly from the CLI ([#13](https://github.com/chatwoot/cli/pull/13)). Account-relative paths such as `/conversations/123` are expanded automatically under `/api/v1/accounts/<account_id>`; use `--exact` to target absolute paths like `/api/v1/profile`. Supports custom methods (`-X`), JSON request bodies, file/stdin bodies (`--data`), and additional headers. JSON responses are pretty-printed; non-JSON responses are passed through as-is.
+- **`wavo api` raw API command** — make authenticated Wavo API requests directly from the CLI. Account-relative paths such as `/conversations/123` are expanded automatically under `/api/v1/accounts/<account_id>`; use `--exact` to target absolute paths like `/api/v1/profile`. Supports custom methods (`-X`), JSON request bodies, file/stdin bodies (`--data`), and additional headers. JSON responses are pretty-printed; non-JSON responses are passed through as-is.
 
   ```bash
-  chatwoot api /conversations/123
-  chatwoot api -X PATCH /conversations/123 --data '{"status":"open"}'
-  chatwoot api --exact /api/v1/profile
+  wavo api /conversations/123
+  wavo api -X PATCH /conversations/123 --data '{"status":"open"}'
+  wavo api --exact /api/v1/profile
   ```
 
 ### Changed
 
-- Updated the bundled agent skill with stronger raw API guidance: prefer first-class commands, consult the Chatwoot Swagger before raw calls, and treat all writes (including non-GET raw API calls) as privileged actions requiring explicit user confirmation.
+- Updated the bundled agent skill with stronger raw API guidance: prefer first-class commands, consult the Wavo Swagger before raw calls, and treat all writes (including non-GET raw API calls) as privileged actions requiring explicit user confirmation.
 - Simplified the README to focus on core setup and usage, delegating full command details to the docs site.
 
 ## [0.4.0] - 2026-05-11
 
 ### Added
 
-- **`chatwoot conv contact` command** — fetch the contact attached to a conversation directly from the conversation id, without a separate contacts lookup ([#10](https://github.com/chatwoot/cli/pull/10)).
+- **`wavo conv contact` command** — fetch the contact attached to a conversation directly from the conversation id, without a separate contacts lookup.
 - **Version check** — the CLI now checks for newer releases so users know when an update is available.
-- **Smarter install script** — detects an existing install, skips the completion prompt on rerun, and uses the `install` command when available ([#11](https://github.com/chatwoot/cli/pull/11)).
+- **Smarter install script** — detects an existing install, skips the completion prompt on rerun, and uses the `install` command when available.
 
 ### Changed
 
-- Improved CI and tooling: added `govulncheck`, a `go mod tidy` diff check, a coverage task with a sticky PR coverage comment (gated to same-repo PRs), and dependency review for PRs. Bumped GitHub Actions versions and updated the Go toolchain ([#9](https://github.com/chatwoot/cli/pull/9)).
+- Improved CI and tooling: added `govulncheck`, a `go mod tidy` diff check, a coverage task with a sticky PR coverage comment (gated to same-repo PRs), and dependency review for PRs. Bumped GitHub Actions versions and updated the Go toolchain.
 - Removed the bundled `.claude` directory.
-- Bumped `github.com/alecthomas/kong` from 1.14.0 to 1.15.0 ([#4](https://github.com/chatwoot/cli/pull/4)).
-- Bumped `github.com/getkin/kin-openapi` from 0.133.0 to 0.138.0 ([#8](https://github.com/chatwoot/cli/pull/8)).
-- Bumped `golang.org/x/term` from 0.31.0 to 0.43.0 ([#6](https://github.com/chatwoot/cli/pull/6)).
+- Bumped `github.com/alecthomas/kong` from 1.14.0 to 1.15.0.
+- Bumped `github.com/getkin/kin-openapi` from 0.133.0 to 0.138.0.
+- Bumped `golang.org/x/term` from 0.31.0 to 0.43.0.
 
 ## [0.3.0] - 2026-05-11
 
@@ -109,7 +109,7 @@ Adds a raw API escape hatch for cases where the CLI does not yet have a first-cl
 
 ## [0.1.0] - 2026-05-08
 
-First release. A CLI for Chatwoot that reads and writes the same Chatwoot API your dashboard uses.
+First release. A CLI for Wavo that reads and writes the same Wavo API your dashboard uses.
 
 ### Added
 
@@ -123,13 +123,13 @@ First release. A CLI for Chatwoot that reads and writes the same Chatwoot API yo
 - Release pipeline and smoke test.
 - Pre-built binaries for macOS, Linux (x86_64 + arm64), and Windows.
 
-Install with `curl -fsSL https://chwt.app/install-cli | sh`, then `chatwoot auth login`.
+Install with `curl -fsSL https://my.wavo.it/install-cli | sh`, then `wavo auth login`.
 
-[Unreleased]: https://github.com/chatwoot/cli/compare/v0.6.1...HEAD
-[0.6.1]: https://github.com/chatwoot/cli/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/chatwoot/cli/compare/v0.5.0...v0.6.0
-[0.5.0]: https://github.com/chatwoot/cli/compare/v0.4.0...v0.5.0
-[0.4.0]: https://github.com/chatwoot/cli/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/chatwoot/cli/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/chatwoot/cli/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/chatwoot/cli/releases/tag/v0.1.0
+[Unreleased]: https://github.com/iRaxe/wavo-cli/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/iRaxe/wavo-cli/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/iRaxe/wavo-cli/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/iRaxe/wavo-cli/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/iRaxe/wavo-cli/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/iRaxe/wavo-cli/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/iRaxe/wavo-cli/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/iRaxe/wavo-cli/releases/tag/v0.1.0

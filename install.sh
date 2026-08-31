@@ -1,20 +1,20 @@
 #!/usr/bin/env sh
-# install.sh — download a chatwoot-cli release binary into a local bin dir.
+# install.sh — download a wavo-cli release binary into a local bin dir.
 #
 # Usage:
-#   curl -fsSL https://chwt.app/install-cli | sh
+#   curl -fsSL https://my.wavo.it/install-cli | sh
 #
 # Environment:
-#   CHATWOOT_VERSION      pin a specific version, e.g. "v0.2.1" (default: latest)
-#   CHATWOOT_INSTALL_DIR  install location (default: $HOME/.local/bin)
+#   WAVO_VERSION      pin a specific version, e.g. "v0.2.1" (default: latest)
+#   WAVO_INSTALL_DIR  install location (default: $HOME/.local/bin)
 #   NO_COLOR              set to disable color/banner output
 
 set -eu
 
-REPO="chatwoot/cli"
-BINARY="chatwoot"
-INSTALL_DIR="${CHATWOOT_INSTALL_DIR:-$HOME/.local/bin}"
-VERSION="${CHATWOOT_VERSION:-latest}"
+REPO="iRaxe/wavo-cli"
+BINARY="wavo"
+INSTALL_DIR="${WAVO_INSTALL_DIR:-$HOME/.local/bin}"
+VERSION="${WAVO_VERSION:-latest}"
 
 # ---------------------------------------------------------------------------
 # Pretty output
@@ -43,9 +43,7 @@ banner() {
   [ -z "${NO_COLOR:-}" ] || return 0
   printf '\n%s' "$C_CYAN"
   cat <<'EOF'
-  ┏━┛┃ ┃┏━┃━┏┛┃┃┃┏━┃┏━┃━┏┛  ┏━┛┃  ┛
-  ┃  ┏━┃┏━┃ ┃ ┃┃┃┃ ┃┃ ┃ ┃   ┃  ┃  ┃
-  ━━┛┛ ┛┛ ┛ ┛ ━━┛━━┛━━┛ ┛   ━━┛━━┛┛
+  W A V O   C L I
 EOF
   printf '%s\n' "$C_RESET"
 }
@@ -194,10 +192,10 @@ esac
 # to the curl pipe — we read input from /dev/tty instead.
 print_next_steps() {
   printf '\n  %sNext steps%s\n' "$C_BOLD" "$C_RESET"
-  if [ ! -f "$HOME/.chatwoot/config.yaml" ]; then
-    printf '    %schatwoot auth login%s        log in to your Chatwoot instance\n' "$C_CYAN" "$C_RESET"
+  if [ ! -f "$HOME/.wavo/config.yaml" ]; then
+    printf '    %swavo auth login%s        log in to your Wavo instance\n' "$C_CYAN" "$C_RESET"
   fi
-  printf '    %schatwoot --help%s            see all commands\n\n' "$C_CYAN" "$C_RESET"
+  printf '    %swavo --help%s            see all commands\n\n' "$C_CYAN" "$C_RESET"
 }
 
 if [ ! -t 1 ] || [ ! -r /dev/tty ]; then
@@ -265,7 +263,7 @@ else
           ok "Added fish completion to ${completion_path}"
           ;;
         zsh)
-          printf '\n# chatwoot CLI completion\n%s\n' "$zsh_line" >> "$rc"
+          printf '\n# Wavo CLI completion\n%s\n' "$zsh_line" >> "$rc"
           ok "Added zsh completion to ${rc} — restart your shell to enable"
           ;;
       esac
@@ -274,20 +272,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Optional: 'cw' alias
+# Optional: 'wv' alias
 # ---------------------------------------------------------------------------
 case "$shell_kind" in
   bash)
     alias_rc="$HOME/.bashrc"
-    alias_line="alias cw='$BINARY'"
+    alias_line="alias wv='$BINARY'"
     ;;
   zsh)
     alias_rc="${ZDOTDIR:-$HOME}/.zshrc"
-    alias_line="alias cw='$BINARY'"
+    alias_line="alias wv='$BINARY'"
     ;;
   fish)
     alias_rc="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
-    alias_line="alias cw '$BINARY'"
+    alias_line="alias wv '$BINARY'"
     ;;
 esac
 
@@ -295,21 +293,21 @@ alias_configured=false
 [ -f "$alias_rc" ] && grep -Fq "$alias_line" "$alias_rc" && alias_configured=true
 
 if [ "$alias_configured" = true ]; then
-  step "'cw' alias already configured in ${alias_rc} — skipping"
+  step "'wv' alias already configured in ${alias_rc} — skipping"
 else
-  printf "\n  %sCreate 'cw' alias for %s?%s [Y/n] " "$C_BOLD" "$BINARY" "$C_RESET"
+  printf "\n  %sCreate 'wv' alias for %s?%s [Y/n] " "$C_BOLD" "$BINARY" "$C_RESET"
   if ! read -r response < /dev/tty; then
     echo
     response=n
   fi
   case "$response" in
     n|N|no|NO|No)
-      step "Skipped 'cw' alias setup"
+      step "Skipped 'wv' alias setup"
       ;;
     *)
       mkdir -p "$(dirname "$alias_rc")"
-      printf '\n# chatwoot CLI alias\n%s\n' "$alias_line" >> "$alias_rc"
-      ok "Added 'cw' alias to ${alias_rc} — restart your shell to enable"
+      printf '\n# Wavo CLI alias\n%s\n' "$alias_line" >> "$alias_rc"
+      ok "Added 'wv' alias to ${alias_rc} — restart your shell to enable"
       ;;
   esac
 fi

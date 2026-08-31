@@ -8,8 +8,8 @@ import (
 // CLI is the root Kong struct defining the entire command tree.
 //
 // Grammar:
-//   - Plural noun = list:    `chatwoot convs`, `chatwoot contacts`
-//   - Singular + verb + id:  `chatwoot conv view 123`, `chatwoot conv reply 123 "hi"`
+//   - Plural noun = list:    `wavo convs`, `wavo contacts`
+//   - Singular + verb + id:  `wavo conv view 123`, `wavo conv reply 123 "hi"`
 //   - `conv 123` is shorthand for `conv view 123` (default subcommand).
 type CLI struct {
 	Output  string `short:"o" default:"text" enum:"text,json,csv" help:"Output format."`
@@ -36,7 +36,7 @@ type CLI struct {
 	// Workflow. `me` and `whoami` are aliases of `auth status`.
 	Me     MeCmd     `cmd:"" help:"Show identity and connection (alias of 'auth status')."`
 	Whoami WhoamiCmd `cmd:"" help:"Show identity and connection (alias of 'auth status')."`
-	Api    ApiCmd    `cmd:"" help:"Make an HTTP request to the Chatwoot API."`
+	Api    ApiCmd    `cmd:"" help:"Make an HTTP request to the Wavo API."`
 
 	// Setup.
 	Auth   AuthCmd   `cmd:"" help:"Login, logout, and status."`

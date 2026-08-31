@@ -5,12 +5,13 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
 	"github.com/iRaxe/wavo-cli/internal/output"
 	"github.com/iRaxe/wavo-cli/internal/sdk"
 )
 
-// HCsCmd is `chatwoot hcs` — list help center portals on the account.
+// HCsCmd is `wavo hcs` — list help center portals on the account.
 type HCsCmd struct{}
 
 func (c *HCsCmd) Run(app *App) error {
@@ -111,12 +112,12 @@ func (c *HCDefaultCmd) Run(app *App) error {
 }
 
 type HCArticlesCmd struct {
-	PortalSlug   string `name:"portal" help:"Help center portal slug. Defaults to 'chatwoot hc default'."`
+	PortalSlug   string `name:"portal" help:"Help center portal slug. Defaults to 'wavo hc default'."`
 	Locale       string `help:"Article locale, for example en. Defaults to the configured help center locale."`
 	CategorySlug string `name:"category" help:"Restrict results to a category slug."`
 	Query        string `help:"Search query."`
 	Page         int    `short:"p" default:"1" help:"Page number."`
-	PerPage      int    `help:"Results per page, capped by Chatwoot at 100."`
+	PerPage      int    `help:"Results per page, capped by Wavo at 100."`
 }
 
 func (c *HCArticlesCmd) Run(app *App) error {
@@ -169,7 +170,7 @@ func (c *HCArticlesCmd) Run(app *App) error {
 }
 
 type HCArticleCmd struct {
-	PortalSlug  string `name:"portal" help:"Help center portal slug. Defaults to 'chatwoot hc default'."`
+	PortalSlug  string `name:"portal" help:"Help center portal slug. Defaults to 'wavo hc default'."`
 	ArticleSlug string `arg:"" help:"Article slug."`
 }
 
@@ -241,7 +242,7 @@ func resolveHelpCenterPortal(app *App, explicitPortal string) (string, error) {
 	if app.Config != nil && strings.TrimSpace(app.Config.HelpCenter.DefaultPortalSlug) != "" {
 		return strings.TrimSpace(app.Config.HelpCenter.DefaultPortalSlug), nil
 	}
-	return "", fmt.Errorf("no default help center set. Run 'chatwoot hc default <slug>' or pass --portal")
+	return "", fmt.Errorf("no default help center set. Run '%s hc default <slug>' or pass --portal", brand.Command)
 }
 
 func resolveHelpCenterLocale(app *App, explicitLocale string) (string, error) {
@@ -251,7 +252,7 @@ func resolveHelpCenterLocale(app *App, explicitLocale string) (string, error) {
 	if app.Config != nil && strings.TrimSpace(app.Config.HelpCenter.DefaultLocale) != "" {
 		return strings.TrimSpace(app.Config.HelpCenter.DefaultLocale), nil
 	}
-	return "", fmt.Errorf("no default help center locale set. Pass --locale or reset the default with 'chatwoot hc default <slug>'")
+	return "", fmt.Errorf("no default help center locale set. Pass --locale or reset the default with '%s hc default <slug>'", brand.Command)
 }
 
 func portalDefaultLocale(portal sdk.HelpCenterPortal) string {

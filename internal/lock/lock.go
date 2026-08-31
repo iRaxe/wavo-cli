@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
 )
 
 // ErrLocked is returned when another process already holds the lock.
-var ErrLocked = errors.New("resource is locked by another Wavo process")
+var ErrLocked = errors.New("resource is locked by another " + brand.Product + " process")
 
 // Lock is a held advisory lock. Release it with Release.
 // The OS releases it automatically if the process exits or crashes.
@@ -41,7 +42,7 @@ func AcquireAuth() (*Lock, error) {
 	if config.IsDev {
 		name = "auth-dev.lock"
 	}
-	return acquireFileAt(filepath.Join(cfgDir, "locks"), name, "Wavo authentication")
+	return acquireFileAt(filepath.Join(cfgDir, "locks"), name, brand.Product+" authentication")
 }
 
 func acquireAt(dir string, id int) (*Lock, error) {

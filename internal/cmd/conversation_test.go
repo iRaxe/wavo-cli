@@ -19,7 +19,7 @@ import (
 func setupTestEnv(t *testing.T) {
 	t.Helper()
 	keyring.MockInit()
-	if err := keyring.DeleteAll("chatwoot-cli"); err != nil {
+	if err := keyring.DeleteAll("wavo-cli"); err != nil {
 		t.Fatalf("keyring.DeleteAll: %v", err)
 	}
 	t.Setenv("HOME", t.TempDir())
@@ -488,6 +488,6 @@ func TestConvUnassignPostsZeroAssignee(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	if got.AssigneeID == nil || *got.AssigneeID != 0 {
-		t.Errorf("posted assignee_id = %v, want 0 (Chatwoot's unassign sentinel)", got.AssigneeID)
+		t.Errorf("posted assignee_id = %v, want 0 (Wavo's unassign sentinel)", got.AssigneeID)
 	}
 }

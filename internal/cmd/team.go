@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// TeamsCmd is `chatwoot teams` — list teams on the account.
+// TeamsCmd is `wavo teams` — list teams on the account.
 type TeamsCmd struct{}
 
 func (c *TeamsCmd) Run(app *App) error {

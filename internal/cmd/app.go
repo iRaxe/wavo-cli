@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
 	"github.com/iRaxe/wavo-cli/internal/output"
 	"github.com/iRaxe/wavo-cli/internal/sdk"
@@ -32,7 +33,7 @@ func NewApp(cli *CLI, skipAuth bool, version string) (*App, error) {
 	}
 
 	if cfg == nil || !cfg.IsValid() {
-		return nil, fmt.Errorf("not authenticated. Run 'chatwoot auth login' to set up credentials")
+		return nil, fmt.Errorf("not authenticated. Run '%s auth login' to set up credentials", brand.Command)
 	}
 
 	effectiveCfg := *cfg

@@ -12,15 +12,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/output"
 )
 
 var (
 	errRedirectRefused     = errors.New("redirect refused")
-	errAPIRequestFailed    = errors.New("request to Wavo API failed")
-	errAPIResponseRead     = errors.New("failed to read Wavo API response")
-	errAPIResponseDecode   = errors.New("failed to decode Wavo API response")
-	errAPIResponseTooLarge = errors.New("response from Wavo API too large")
+	errAPIRequestFailed    = errors.New("request to " + brand.Product + " API failed")
+	errAPIResponseRead     = errors.New("failed to read " + brand.Product + " API response")
+	errAPIResponseDecode   = errors.New("failed to decode " + brand.Product + " API response")
+	errAPIResponseTooLarge = errors.New("response from " + brand.Product + " API too large")
 )
 
 const (

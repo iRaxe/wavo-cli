@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
 	"github.com/iRaxe/wavo-cli/internal/lock"
 )
@@ -13,27 +14,27 @@ import (
 // refuses to apply data obtained under a different Wavo authentication scope.
 func updateConfigForAuth(snapshot *config.Config, mutate func(*config.Config) error) (*config.Config, error) {
 	if snapshot == nil {
-		return nil, fmt.Errorf("authentication for Wavo is unavailable; reload and retry the command")
+		return nil, fmt.Errorf("authentication for %s is unavailable; reload and retry the command", brand.Product)
 	}
 
 	authLock, err := lock.AcquireAuth()
 	if err != nil {
-		return nil, fmt.Errorf("cannot safely update Wavo authentication; retry the command: %w", err)
+		return nil, fmt.Errorf("cannot safely update %s authentication; retry the command: %w", brand.Product, err)
 	}
 	defer authLock.Release()
 
 	current, err := config.Load()
 	if err != nil {
-		return nil, fmt.Errorf("cannot reload Wavo authentication; retry the command: %w", err)
+		return nil, fmt.Errorf("cannot reload %s authentication; retry the command: %w", brand.Product, err)
 	}
 	if current == nil || !sameAuthTuple(current, snapshot) {
-		return nil, fmt.Errorf("authentication for Wavo changed; reload and retry the command")
+		return nil, fmt.Errorf("authentication for %s changed; reload and retry the command", brand.Product)
 	}
 	if err := mutate(current); err != nil {
 		return nil, err
 	}
 	if err := config.Save(current); err != nil {
-		return nil, fmt.Errorf("failed to save Wavo configuration: %w", err)
+		return nil, fmt.Errorf("failed to save %s configuration: %w", brand.Product, err)
 	}
 	return current, nil
 }

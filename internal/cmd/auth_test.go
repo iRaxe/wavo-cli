@@ -961,15 +961,15 @@ func TestAuthLoginConfigFailureRollsBackWavoCredentialOnly(t *testing.T) {
 	if err := keyring.DeleteAll(activeAuthKeyringService()); err != nil {
 		t.Fatalf("keyring.DeleteAll Wavo: %v", err)
 	}
-	if err := keyring.DeleteAll("chatwoot-cli"); err != nil {
-		t.Fatalf("keyring.DeleteAll upstream: %v", err)
+	if err := keyring.DeleteAll("other-cli"); err != nil {
+		t.Fatalf("keyring.DeleteAll other service: %v", err)
 	}
 	t.Setenv(config.APIKeyEnv, "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	blockConfigReplacement(t)
-	if err := keyring.Set("chatwoot-cli", "api-key", "upstream-token"); err != nil {
-		t.Fatalf("seed upstream credential: %v", err)
+	if err := keyring.Set("other-cli", "api-key", "other-token"); err != nil {
+		t.Fatalf("seed other credential: %v", err)
 	}
 	if err := keyring.Set(activeAuthKeyringService(), "unrelated-entry", "keep-me"); err != nil {
 		t.Fatalf("seed unrelated Wavo credential: %v", err)
@@ -986,8 +986,8 @@ func TestAuthLoginConfigFailureRollsBackWavoCredentialOnly(t *testing.T) {
 	if _, _, err := config.ResolveAPIKey(cfg); !errors.Is(err, config.ErrAPIKeyNotFound) {
 		t.Fatalf("new Wavo credential remained after rollback: %v", err)
 	}
-	if got, err := keyring.Get("chatwoot-cli", "api-key"); err != nil || got != "upstream-token" {
-		t.Fatalf("rollback changed upstream credential: got=%q err=%v", got, err)
+	if got, err := keyring.Get("other-cli", "api-key"); err != nil || got != "other-token" {
+		t.Fatalf("rollback changed other credential: got=%q err=%v", got, err)
 	}
 	if got, err := keyring.Get(activeAuthKeyringService(), "unrelated-entry"); err != nil || got != "keep-me" {
 		t.Fatalf("rollback changed unrelated Wavo credential: got=%q err=%v", got, err)

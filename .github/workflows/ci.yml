@@ -31,8 +31,14 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - name: go build
-        run: go build ./...
+      - name: Wavo branding gate
+        run: |
+          ./scripts/check-branding.sh
+          ./scripts/check-branding-test.sh
+          ./scripts/update-swagger-test.sh
+          mkdir -p ./bin
+          go build -trimpath -o ./bin/wavo ./cmd/wavo
+          ./scripts/check-branding.sh ./bin/wavo
 
       - name: go test
         run: go test -race -count=1 -covermode=atomic -coverprofile=cover.out ./...
@@ -68,7 +74,7 @@ jobs:
         with:
           coverage-artifact-name: coverage-profile
           coverage-file-name: cover.out
-          root-package: github.com/chatwoot/cli
+          root-package: github.com/iRaxe/wavo-cli
 
   govulncheck:
     runs-on: ubuntu-latest

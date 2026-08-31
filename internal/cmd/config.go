@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
 	"github.com/iRaxe/wavo-cli/internal/output"
 )
@@ -33,7 +34,7 @@ func (c *ConfigViewCmd) Run(app *App) error {
 	}
 
 	if cfg == nil {
-		fmt.Println("No configuration found. Run 'chatwoot auth login' to set up.")
+		fmt.Printf("No configuration found. Run '%s auth login' to set up.\n", brand.Command)
 		return nil
 	}
 

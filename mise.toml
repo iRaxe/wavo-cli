@@ -25,8 +25,8 @@ depends = ["cover"]
 run = "go tool cover -html=coverage.out"
 
 [tasks."sdk:update-swagger"]
-description = "Update the pinned Chatwoot application Swagger snapshot"
-run = "curl -fL https://raw.githubusercontent.com/chatwoot/chatwoot/develop/swagger/tag_groups/application_swagger.json -o internal/sdk/testdata/application_swagger.json"
+description = "Refresh the bundled Wavo Swagger contract from a local source checkout"
+run = "./scripts/update-swagger.sh"
 
 [tasks.agents]
 description = "Create AGENTS.md symlinks to CLAUDE.md in all module directories"

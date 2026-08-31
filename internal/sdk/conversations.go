@@ -189,7 +189,7 @@ func (s *ConversationsService) Assign(id int, assigneeID *int, teamID int) (*Use
 }
 
 func (s *ConversationsService) Unassign(id int) error {
-	// Chatwoot treats assignee_id: 0 (not null) as the unassign signal.
+	// Wavo treats assignee_id: 0 (not null) as the unassign signal.
 	zero := 0
 	body := AssignRequest{AssigneeID: &zero}
 	jsonBody, err := json.Marshal(body)
@@ -206,7 +206,7 @@ type UpdatePriorityRequest struct {
 // UpdatePriority sets the conversation priority. Accepted values:
 // "urgent", "high", "medium", "low". Pass "" to clear (sends JSON null).
 //
-// Note: Chatwoot's swagger spec also lists "none" as a valid enum value, but
+// Note: Wavo's swagger spec also lists "none" as a valid enum value, but
 // the live toggle_priority endpoint returns 500 when sent literally. Sending
 // null clears the priority cleanly.
 func (s *ConversationsService) UpdatePriority(id int, priority string) error {

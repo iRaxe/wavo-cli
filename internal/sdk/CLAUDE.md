@@ -1,6 +1,16 @@
-# internal/sdk - Chatwoot API Client
+# internal/sdk - Wavo API Client
 
-HTTP client and service layer for Chatwoot API access. Built with a factory pattern — each service (conversations, messages, contacts, etc.) is accessed via a method on the `Client` struct.
+HTTP client and service layer for Wavo API access. Built with a factory pattern — each service (conversations, messages, contacts, etc.) is accessed via a method on the `Client` struct.
+
+The bundled API contract is pinned at
+`internal/sdk/testdata/application_swagger.json`; ordinary development and CLI
+use must not fetch a remote copy. Maintainers can refresh the snapshot from a
+local Wavo source checkout by setting `WAVO_SOURCE_DIR` to that checkout's
+exact Git toplevel and running `mise run sdk:update-swagger`. The checkout must
+have the canonical iRaxe/myWavo GitHub remote; the task validates the OpenAPI
+document before atomically replacing the bundled snapshot. The maintenance
+task requires Go installed in a standard system location; caller-provided PATH
+tools are never used.
 
 ## Core Files
 
@@ -121,7 +131,7 @@ Authenticated user profile.
 
 ## Authentication
 
-- Token resolved by callers from `CHATWOOT_API_KEY` or the OS keyring
+- Token resolved by callers from `WAVO_API_KEY` or the OS keyring
 - Injected as `api_access_token` header on all requests
 - Token must have `conversation:read`, `message:read`, `message:write` scopes
 
