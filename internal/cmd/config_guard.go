@@ -13,7 +13,7 @@ import (
 // refuses to apply data obtained under a different Wavo authentication scope.
 func updateConfigForAuth(snapshot *config.Config, mutate func(*config.Config) error) (*config.Config, error) {
 	if snapshot == nil {
-		return nil, fmt.Errorf("Wavo authentication is unavailable; reload and retry the command")
+		return nil, fmt.Errorf("authentication for Wavo is unavailable; reload and retry the command")
 	}
 
 	authLock, err := lock.AcquireAuth()
@@ -27,7 +27,7 @@ func updateConfigForAuth(snapshot *config.Config, mutate func(*config.Config) er
 		return nil, fmt.Errorf("cannot reload Wavo authentication; retry the command: %w", err)
 	}
 	if current == nil || !sameAuthTuple(current, snapshot) {
-		return nil, fmt.Errorf("Wavo authentication changed; reload and retry the command")
+		return nil, fmt.Errorf("authentication for Wavo changed; reload and retry the command")
 	}
 	if err := mutate(current); err != nil {
 		return nil, err

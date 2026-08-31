@@ -111,11 +111,11 @@ func TestAuthenticatedDiagnosticsNeverContainActiveCredential(t *testing.T) {
 		t.Run(token, func(t *testing.T) {
 			scenarios := []struct {
 				name string
-				run  func() (error, string)
+				run  func() (string, error)
 			}{
 				{
 					name: "verbose success",
-					run: func() (error, string) {
+					run: func() (string, error) {
 						httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 							return &http.Response{
 								StatusCode: http.StatusOK,
@@ -129,12 +129,12 @@ func TestAuthenticatedDiagnosticsNeverContainActiveCredential(t *testing.T) {
 						var decoded map[string]any
 						var requestErr error
 						stderr := captureStderr(t, func() { requestErr = client.Get("/profile", nil, &decoded) })
-						return requestErr, stderr
+						return stderr, requestErr
 					},
 				},
 				{
 					name: "transport failure",
-					run: func() (error, string) {
+					run: func() (string, error) {
 						httpClient := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 							return nil, errors.New("transport diagnostic " + token)
 						})}
@@ -142,12 +142,12 @@ func TestAuthenticatedDiagnosticsNeverContainActiveCredential(t *testing.T) {
 						var decoded map[string]any
 						var requestErr error
 						stderr := captureStderr(t, func() { requestErr = client.Get("/profile", nil, &decoded) })
-						return requestErr, stderr
+						return stderr, requestErr
 					},
 				},
 				{
 					name: "redirect refusal",
-					run: func() (error, string) {
+					run: func() (string, error) {
 						target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 							_, _ = io.WriteString(w, `{}`)
 						}))
@@ -161,12 +161,12 @@ func TestAuthenticatedDiagnosticsNeverContainActiveCredential(t *testing.T) {
 						var decoded map[string]any
 						var requestErr error
 						stderr := captureStderr(t, func() { requestErr = client.GetRaw("/profile", nil, &decoded) })
-						return requestErr, stderr
+						return stderr, requestErr
 					},
 				},
 				{
 					name: "body read failure",
-					run: func() (error, string) {
+					run: func() (string, error) {
 						httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 							return &http.Response{
 								StatusCode: http.StatusOK,
@@ -181,12 +181,12 @@ func TestAuthenticatedDiagnosticsNeverContainActiveCredential(t *testing.T) {
 						stderr := captureStderr(t, func() {
 							_, requestErr = client.RequestRaw(http.MethodGet, "/profile", nil, false, nil)
 						})
-						return requestErr, stderr
+						return stderr, requestErr
 					},
 				},
 				{
 					name: "decode failure",
-					run: func() (error, string) {
+					run: func() (string, error) {
 						httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 							return &http.Response{
 								StatusCode: http.StatusOK,
@@ -200,12 +200,12 @@ func TestAuthenticatedDiagnosticsNeverContainActiveCredential(t *testing.T) {
 						var decoded map[string]any
 						var requestErr error
 						stderr := captureStderr(t, func() { requestErr = client.Get("/profile", nil, &decoded) })
-						return requestErr, stderr
+						return stderr, requestErr
 					},
 				},
 				{
 					name: "API error",
-					run: func() (error, string) {
+					run: func() (string, error) {
 						httpClient := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 							return &http.Response{
 								StatusCode: http.StatusUnauthorized,
@@ -219,14 +219,14 @@ func TestAuthenticatedDiagnosticsNeverContainActiveCredential(t *testing.T) {
 						var decoded map[string]any
 						var requestErr error
 						stderr := captureStderr(t, func() { requestErr = client.Get("/profile", nil, &decoded) })
-						return requestErr, stderr
+						return stderr, requestErr
 					},
 				},
 			}
 
 			for _, scenario := range scenarios {
 				t.Run(scenario.name, func(t *testing.T) {
-					requestErr, stderr := scenario.run()
+					stderr, requestErr := scenario.run()
 					combined := stderr
 					if requestErr != nil {
 						combined += requestErr.Error()
@@ -365,6 +365,19 @@ func TestTransportErrorsAfterCredentialBearingRedirectAreGeneric(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTransportErrorUsesLowercaseWavoDiagnostic(t *testing.T) {
+	httpClient := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("untrusted transport detail")
+	})}
+	client := NewClient("https://wavo.example", "ordinary-active-token", 7, WithHTTPClient(httpClient))
+	var decoded map[string]any
+
+	err := client.Get("/profile", nil, &decoded)
+	if err == nil || err.Error() != "request to Wavo API failed" || !errors.Is(err, errAPIRequestFailed) {
+		t.Fatalf("request error = %v, want lowercase generic Wavo diagnostic", err)
 	}
 }
 
@@ -611,7 +624,7 @@ func TestVerboseDecodedResponseRejectsOversizedBody(t *testing.T) {
 	stderr := captureStderr(t, func() {
 		requestErr = client.Get("/profile", nil, &decoded)
 	})
-	if requestErr == nil || requestErr.Error() != "Wavo API response too large" {
+	if requestErr == nil || requestErr.Error() != "response from Wavo API too large" {
 		t.Fatalf("Get error = %v, want constant oversized-response error", requestErr)
 	}
 	if body.read != verboseLimit+1 {

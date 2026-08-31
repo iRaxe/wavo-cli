@@ -474,7 +474,7 @@ func (c *ConvContactCmd) Run(app *App) error {
 // Helpers.
 // -----------------------------------------------------------------------------
 
-var errResolveAgentProfile = errors.New("Wavo profile unavailable; retry the command or run 'wavo auth login'")
+var errResolveAgentProfile = errors.New("profile request to Wavo failed; retry the command or run 'wavo auth login'")
 
 func resolveAgent(app *App, ref string) (int, error) {
 	ref = strings.TrimSpace(ref)

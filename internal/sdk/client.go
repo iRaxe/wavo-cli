@@ -17,10 +17,10 @@ import (
 
 var (
 	errRedirectRefused     = errors.New("redirect refused")
-	errAPIRequestFailed    = errors.New("Wavo API request failed")
+	errAPIRequestFailed    = errors.New("request to Wavo API failed")
 	errAPIResponseRead     = errors.New("failed to read Wavo API response")
 	errAPIResponseDecode   = errors.New("failed to decode Wavo API response")
-	errAPIResponseTooLarge = errors.New("Wavo API response too large")
+	errAPIResponseTooLarge = errors.New("response from Wavo API too large")
 )
 
 const (

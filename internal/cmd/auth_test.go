@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,6 +21,20 @@ import (
 	"github.com/iRaxe/wavo-cli/internal/sdk"
 	"github.com/zalando/go-keyring"
 )
+
+type failingWriter struct {
+	failAt int
+	writes int
+	err    error
+}
+
+func (w *failingWriter) Write(data []byte) (int, error) {
+	w.writes++
+	if w.writes == w.failAt {
+		return 0, w.err
+	}
+	return len(data), nil
+}
 
 // setupAuthStatusEnv isolates HOME and the keyring, stubs the Profile
 // endpoint, saves a config pointing at the stub, and authenticates via the
@@ -246,10 +261,10 @@ func TestSelectedAccountOmitsEmptySanitizedName(t *testing.T) {
 }
 
 func TestAuthProfileErrorsAreConstant(t *testing.T) {
-	if got, want := errLoginProfile.Error(), "Wavo authentication failed. Verify credentials or run 'wavo auth login'."; got != want {
+	if got, want := errLoginProfile.Error(), "authentication for Wavo failed; verify credentials or run 'wavo auth login'"; got != want {
 		t.Fatalf("login profile error = %q, want %q", got, want)
 	}
-	if got, want := errStatusProfile.Error(), "Wavo profile unavailable. Check availability or run 'wavo auth login'."; got != want {
+	if got, want := errStatusProfile.Error(), "profile request to Wavo failed; check availability or run 'wavo auth login'"; got != want {
 		t.Fatalf("status profile error = %q, want %q", got, want)
 	}
 }
@@ -357,6 +372,106 @@ func TestSelectAccount(t *testing.T) {
 	}
 	if got, err := selectAccount(strings.NewReader(""), nil, 11, io.Discard); err != nil || got != 11 {
 		t.Fatalf("fallback selectAccount() = (%d, %v), want (11, nil)", got, err)
+	}
+}
+
+func TestSelectAccountWriterErrorsAreSafe(t *testing.T) {
+	accounts := []profileDisplayAccount{
+		{ID: 7, Name: "Acme", Role: "administrator"},
+		{ID: 9, Name: "Beta", Role: "agent"},
+	}
+	const unsafeDiagnostic = "writer reflected active-token and provider output"
+	for _, test := range []struct {
+		name   string
+		failAt int
+	}{
+		{name: "workspace list", failAt: 1},
+		{name: "workspace prompt", failAt: 3},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			writer := &failingWriter{failAt: test.failAt, err: errors.New(unsafeDiagnostic)}
+			accountID, err := selectAccount(strings.NewReader("2\n"), accounts, 0, writer)
+			if accountID != 0 || err == nil || err.Error() != "failed to write Wavo workspace selection" {
+				t.Fatalf("selectAccount() = (%d, %v), want safe writer error", accountID, err)
+			}
+			if strings.Contains(err.Error(), "active-token") || strings.Contains(err.Error(), "provider output") {
+				t.Fatalf("workspace writer error exposed untrusted diagnostic: %q", err)
+			}
+		})
+	}
+}
+
+func TestAuthLoginPromptWriterErrorsAreSafeAndStopBeforeToken(t *testing.T) {
+	const unsafeDiagnostic = "writer reflected active-token and provider output"
+	for _, failAt := range []int{1, 2, 3} {
+		t.Run(strconv.Itoa(failAt), func(t *testing.T) {
+			isolateAuthEnv(t)
+			server := loginProfileServer(t, `{
+				"id": 11,
+				"account_id": 7,
+				"accounts": [{"id": 7, "name": "Acme", "role": "administrator"}]
+			}`)
+			defer server.Close()
+			writer := &failingWriter{failAt: failAt, err: errors.New(unsafeDiagnostic)}
+			tokenRead := false
+			err := (&AuthLoginCmd{}).login(
+				&App{},
+				strings.NewReader(server.URL+"\n"),
+				writer,
+				true,
+				func() (string, error) {
+					tokenRead = true
+					return "active-token", nil
+				},
+			)
+			if err == nil || err.Error() != "failed to write Wavo login prompt" {
+				t.Fatalf("login error = %v, want safe prompt writer error", err)
+			}
+			if tokenRead {
+				t.Fatal("login read the token after prompt output failed")
+			}
+			if strings.Contains(err.Error(), "active-token") || strings.Contains(err.Error(), "provider output") {
+				t.Fatalf("login prompt error exposed untrusted diagnostic: %q", err)
+			}
+			assertNoSavedLogin(t, &config.Config{BaseURL: brand.DefaultBaseURL, AccountID: 7})
+		})
+	}
+}
+
+func TestAuthLoginResultWriterErrorsAreSafe(t *testing.T) {
+	const (
+		activeToken      = "active-token"
+		unsafeDiagnostic = "writer reflected active-token and provider output"
+	)
+	for _, failAt := range []int{4, 5} {
+		t.Run(strconv.Itoa(failAt), func(t *testing.T) {
+			isolateAuthEnv(t)
+			server := loginProfileServer(t, `{
+				"id": 11,
+				"name": "Ada",
+				"email": "ada@example.com",
+				"account_id": 7,
+				"accounts": [{"id": 7, "name": "Acme", "role": "administrator"}]
+			}`)
+			defer server.Close()
+			writer := &failingWriter{failAt: failAt, err: errors.New(unsafeDiagnostic)}
+
+			err := runLogin(t, server.URL+"\n", activeToken, writer)
+			if err == nil || err.Error() != "failed to write Wavo login result" {
+				t.Fatalf("login error = %v, want safe result writer error", err)
+			}
+			if strings.Contains(err.Error(), activeToken) || strings.Contains(err.Error(), "provider output") {
+				t.Fatalf("login result error exposed credential or untrusted diagnostic: %q", err)
+			}
+			cfg, loadErr := config.Load()
+			if loadErr != nil || cfg == nil || cfg.AccountID != 7 || cfg.UserID != 11 {
+				t.Fatalf("persisted login = %#v, %v; want verified account", cfg, loadErr)
+			}
+			gotToken, _, resolveErr := config.ResolveAPIKey(cfg)
+			if resolveErr != nil || gotToken != activeToken {
+				t.Fatalf("persisted token = %q, %v; want active token", gotToken, resolveErr)
+			}
+		})
 	}
 }
 

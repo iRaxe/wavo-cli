@@ -27,8 +27,11 @@ type AuthCmd struct {
 type AuthLoginCmd struct{}
 
 var (
-	errLoginProfile  = errors.New("Wavo authentication failed. Verify credentials or run 'wavo auth login'.")
-	errStatusProfile = errors.New("Wavo profile unavailable. Check availability or run 'wavo auth login'.")
+	errLoginProfile            = errors.New("authentication for Wavo failed; verify credentials or run 'wavo auth login'")
+	errStatusProfile           = errors.New("profile request to Wavo failed; check availability or run 'wavo auth login'")
+	errLoginPromptWrite        = errors.New("failed to write Wavo login prompt")
+	errLoginResultWrite        = errors.New("failed to write Wavo login result")
+	errWorkspaceSelectionWrite = errors.New("failed to write Wavo workspace selection")
 )
 
 func (c *AuthLoginCmd) Run(app *App) error {
@@ -42,10 +45,16 @@ func (c *AuthLoginCmd) Run(app *App) error {
 func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHTTP bool, readToken func() (string, error)) error {
 	bufferedReader := bufio.NewReader(reader)
 
-	fmt.Fprintln(writer, "Wavo CLI Login")
-	fmt.Fprintln(writer, "==============")
+	if _, err := fmt.Fprintln(writer, "Wavo CLI Login"); err != nil {
+		return errLoginPromptWrite
+	}
+	if _, err := fmt.Fprintln(writer, "=============="); err != nil {
+		return errLoginPromptWrite
+	}
 
-	fmt.Fprintf(writer, "Base URL (default: %s): ", brand.DefaultBaseURL)
+	if _, err := fmt.Fprintf(writer, "Base URL (default: %s): ", brand.DefaultBaseURL); err != nil {
+		return errLoginPromptWrite
+	}
 	baseURLInput, err := bufferedReader.ReadString('\n')
 	if err != nil && baseURLInput == "" {
 		return fmt.Errorf("failed to read base URL: %w", err)
@@ -87,8 +96,12 @@ func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHT
 		return fmt.Errorf("%s", redactAuthError(err.Error(), apiKey))
 	}
 
-	fmt.Fprint(writer, loginSuccessMessage(displayProfile.Name, displayProfile.Email))
-	fmt.Fprintf(writer, "Workspace: %s\n", selectedAccount(displayProfile.Accounts, accountID))
+	if _, err := fmt.Fprint(writer, loginSuccessMessage(displayProfile.Name, displayProfile.Email)); err != nil {
+		return errLoginResultWrite
+	}
+	if _, err := fmt.Fprintf(writer, "Workspace: %s\n", selectedAccount(displayProfile.Accounts, accountID)); err != nil {
+		return errLoginResultWrite
+	}
 	return nil
 }
 
@@ -123,7 +136,7 @@ func normalizeLoginBaseURL(input string, allowHTTP bool) (string, error) {
 		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(raw, "#") || u.User != nil {
 		return "", fmt.Errorf("base URL must contain only scheme and host")
 	}
-	if u.Scheme != "https" && !(allowHTTP && u.Scheme == "http") {
+	if u.Scheme != "https" && (!allowHTTP || u.Scheme != "http") {
 		return "", fmt.Errorf("base URL must use HTTPS")
 	}
 	return strings.TrimRight(u.String(), "/"), nil
@@ -154,9 +167,13 @@ func selectAccount(reader io.Reader, accounts []profileDisplayAccount, fallbackI
 		return accounts[0].ID, nil
 	}
 	for i, account := range accounts {
-		fmt.Fprintf(writer, "%d. %s (%d, %s)\n", i+1, output.SanitizeText(account.Name), account.ID, output.SanitizeText(account.Role))
+		if _, err := fmt.Fprintf(writer, "%d. %s (%d, %s)\n", i+1, output.SanitizeText(account.Name), account.ID, output.SanitizeText(account.Role)); err != nil {
+			return 0, errWorkspaceSelectionWrite
+		}
 	}
-	fmt.Fprint(writer, "Workspace: ")
+	if _, err := fmt.Fprint(writer, "Workspace: "); err != nil {
+		return 0, errWorkspaceSelectionWrite
+	}
 	line, err := bufio.NewReader(reader).ReadString('\n')
 	if err != nil && line == "" {
 		return 0, fmt.Errorf("failed to read workspace selection: %w", err)
@@ -301,7 +318,7 @@ func (c *AuthLogoutCmd) Run(app *App) error {
 			}
 			return nil
 		}
-		return fmt.Errorf("Wavo credentials were removed, but the config file could not be removed: %w", err)
+		return fmt.Errorf("credentials for Wavo were removed, but the config file could not be removed: %w", err)
 	}
 
 	fmt.Println("Logged out successfully.")
