@@ -6,6 +6,10 @@ export PATH
 script_dir=$(CDPATH='' cd "$(dirname "$0")" && pwd -P)
 repo_root=$(CDPATH='' cd "$script_dir/.." && pwd -P)
 temporary_file=''
+temporary_source_file=''
+contract_backup=''
+source_backup=''
+replacement_started=0
 validation_root=''
 validator_binary=''
 
@@ -17,12 +21,21 @@ cleanup() {
   trap - EXIT HUP INT TERM
   set +e
   cleanup_failed=0
-  if [ -n "$temporary_file" ] && [ -e "$temporary_file" ]; then
-    rm -f "$temporary_file" || cleanup_failed=1
-    if [ -e "$temporary_file" ]; then
+  if [ "$replacement_started" -ne 0 ]; then
+    if [ -z "$contract_backup" ] || [ -z "$source_backup" ] || \
+      ! cp "$contract_backup" "$destination" || \
+      ! cp "$source_backup" "$source_destination"; then
       cleanup_failed=1
     fi
   fi
+  for cleanup_file in "$temporary_file" "$temporary_source_file" "$contract_backup" "$source_backup"; do
+    if [ -n "$cleanup_file" ] && [ -e "$cleanup_file" ]; then
+      rm -f "$cleanup_file" || cleanup_failed=1
+      if [ -e "$cleanup_file" ]; then
+        cleanup_failed=1
+      fi
+    fi
+  done
   if [ -n "$validation_root" ]; then
     case "$validation_root" in
       /tmp/wavo-swagger-validation.*)
@@ -128,6 +141,15 @@ if [ "$canonical_remote" -ne 1 ]; then
   fail_update "Wavo source checkout has no canonical repository remote."
 fi
 
+set +e
+source_sha=$(safe_git -C "$source_root" rev-parse --verify 'HEAD^{commit}' 2>/dev/null)
+source_sha_status=$?
+set -e
+if [ "$source_sha_status" -ne 0 ] || ! printf '%s\n' "$source_sha" | grep -Eq '^[0-9a-f]{40}$'; then
+  fail_update "Wavo Swagger source HEAD must be a lowercase 40-hex commit SHA."
+fi
+# All subsequent commit-tree reads must use this captured immutable object ID.
+
 source_relative_path=swagger/tag_groups/application_swagger.json
 source_contract="$source_root/$source_relative_path"
 if [ -L "$source_contract" ]; then
@@ -196,6 +218,25 @@ if [ "$source_object" != "$index_object" ]; then
   fail_update "Wavo Swagger source bytes do not match the reviewed index blob."
 fi
 
+set +e
+head_entry=$(safe_git -C "$source_root" ls-tree "$source_sha" -- "$source_relative_path")
+head_entry_status=$?
+set -e
+if [ "$head_entry_status" -ne 0 ] || [ -z "$head_entry" ]; then
+  fail_update "Wavo Swagger source must exist in the recorded source commit."
+fi
+case "$head_entry" in
+  *"$newline"*) fail_update "Wavo Swagger source commit must have exactly one contract entry." ;;
+esac
+IFS=' 	' read -r head_mode head_type head_object head_path <<EOF
+$head_entry
+EOF
+if { [ "$head_mode" != "100644" ] && [ "$head_mode" != "100755" ]; } || \
+  [ "$head_type" != "blob" ] || [ "$head_object" != "$index_object" ] || \
+  [ "$head_path" != "$source_relative_path" ]; then
+  fail_update "Wavo Swagger source bytes must match the recorded source commit."
+fi
+
 # Build the focused validator once in a private validation home/cache. Go gets
 # no caller environment, and acquisition failure occurs before destination IO.
 set +e
@@ -222,8 +263,13 @@ validate_contract "$physical_source_contract"
 
 destination="$repo_root/internal/sdk/testdata/application_swagger.json"
 destination_dir=$(dirname "$destination")
+source_destination="$destination_dir/WAVO_SWAGGER_SOURCE"
 if [ ! -d "$destination_dir" ]; then
   fail_update "Wavo Swagger destination directory does not exist: $destination_dir"
+fi
+if [ -L "$destination" ] || [ ! -f "$destination" ] || \
+  [ -L "$source_destination" ] || [ ! -f "$source_destination" ]; then
+  fail_update "Wavo Swagger contract and provenance destinations must be existing regular files."
 fi
 
 set +e
@@ -250,8 +296,45 @@ validate_contract "$temporary_file"
 if ! chmod 0644 "$temporary_file"; then
   fail_update "Wavo Swagger refresh failed to set the temporary file mode."
 fi
+
+set +e
+temporary_source_file=$(mktemp "$destination_dir/.WAVO_SWAGGER_SOURCE.tmp.XXXXXX")
+temporary_source_status=$?
+set -e
+if [ "$temporary_source_status" -ne 0 ] || [ -z "$temporary_source_file" ]; then
+  fail_update "Wavo Swagger refresh failed to create a provenance temporary file."
+fi
+if ! printf 'mywavo %s\n' "$source_sha" >"$temporary_source_file" || \
+  ! chmod 0644 "$temporary_source_file"; then
+  fail_update "Wavo Swagger refresh failed to stage source provenance."
+fi
+
+# Keep same-directory rollback copies until both destinations have been
+# replaced. Any ordinary failure restores the original pair.
+contract_backup=$(mktemp "$destination_dir/.application_swagger.json.backup.XXXXXX") || \
+  fail_update "Wavo Swagger refresh failed to stage contract rollback data."
+source_backup=$(mktemp "$destination_dir/.WAVO_SWAGGER_SOURCE.backup.XXXXXX") || \
+  fail_update "Wavo Swagger refresh failed to stage provenance rollback data."
+if ! cp "$destination" "$contract_backup" || ! cp "$source_destination" "$source_backup"; then
+  fail_update "Wavo Swagger refresh failed to preserve existing destinations."
+fi
+
+replacement_started=1
 if ! mv "$temporary_file" "$destination"; then
-  fail_update "Wavo Swagger refresh failed to atomically replace the bundled contract."
+  fail_update "Wavo Swagger refresh failed to replace the bundled contract."
 fi
 temporary_file=''
-printf '%s\n' "Updated the bundled Wavo Swagger contract from the validated local source checkout."
+if ! mv "$temporary_source_file" "$source_destination"; then
+  if ! cp "$contract_backup" "$destination" || ! cp "$source_backup" "$source_destination"; then
+    printf '%s\n' "Wavo Swagger refresh failed and could not restore both destinations." >&2
+    exit 2
+  fi
+  replacement_started=0
+  fail_update "Wavo Swagger refresh failed to replace source provenance."
+fi
+temporary_source_file=''
+replacement_started=0
+rm -f "$contract_backup" "$source_backup" || fail_update "Wavo Swagger refresh could not remove rollback files."
+contract_backup=''
+source_backup=''
+printf '%s\n' "Updated the bundled Wavo Swagger contract and provenance from the validated local source checkout."

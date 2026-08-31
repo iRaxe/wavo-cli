@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"regexp"
 	"sync"
 	"testing"
 
@@ -20,6 +21,16 @@ import (
 )
 
 const contractAPIKey = "contract-token"
+
+func TestContractSnapshotHasWavoSource(t *testing.T) {
+	data, err := os.ReadFile("testdata/WAVO_SWAGGER_SOURCE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`\Amywavo [0-9a-f]{40}\n\z`).Match(data) {
+		t.Fatalf("invalid Wavo Swagger source metadata: %q", data)
+	}
+}
 
 var (
 	contractRouterOnce sync.Once

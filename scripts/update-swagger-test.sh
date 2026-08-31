@@ -75,6 +75,9 @@ expect_unchanged() {
   if ! cmp -s "$baseline" "$destination"; then
     fail "$description"
   fi
+  if ! cmp -s "$source_baseline" "$source_destination"; then
+    fail "$description (provenance changed)"
+  fi
   pass "$description"
 }
 
@@ -89,14 +92,18 @@ init_source_repo() {
 
 workspace="$temporary_dir/workspace with spaces"
 destination="$workspace/internal/sdk/testdata/application_swagger.json"
+source_destination="$workspace/internal/sdk/testdata/WAVO_SWAGGER_SOURCE"
 baseline="$temporary_dir/original destination"
+source_baseline="$temporary_dir/original provenance"
 mkdir -p "$workspace/scripts" "$(dirname "$destination")"
 cp "$updater" "$workspace/scripts/update-swagger.sh"
 cp "$repo_root/scripts/safe-git.sh" "$workspace/scripts/safe-git.sh"
 chmod +x "$workspace/scripts/update-swagger.sh"
 copied_updater="$workspace/scripts/update-swagger.sh"
 printf '%s\n' '{"preserve":"this destination"}' >"$destination"
+printf '%s\n' 'mywavo 0000000000000000000000000000000000000000' >"$source_destination"
 cp "$destination" "$baseline"
+cp "$source_destination" "$source_baseline"
 
 expect_failure "missing source directory is rejected" 2 "WAVO_SOURCE_DIR is required" env WAVO_SOURCE_DIR='' "$copied_updater"
 expect_unchanged "missing source directory preserves destination"
@@ -132,12 +139,32 @@ expect_failure "GIT_CONFIG_COUNT cannot inject a canonical remote" 2 "Wavo sourc
   WAVO_SOURCE_DIR="$wrong_remote_source" "$copied_updater"
 expect_unchanged "injected canonical remote preserves destination"
 
+missing_head_source="$temporary_dir/missing HEAD source"
+init_source_repo "$missing_head_source" "https://github.com/iRaxe/myWavo.git"
+expect_failure "missing source HEAD is rejected" 2 "source HEAD must be a lowercase 40-hex commit SHA" \
+  env WAVO_SOURCE_DIR="$missing_head_source" "$copied_updater"
+expect_unchanged "missing source HEAD preserves both destinations"
+
+sha256_source="$temporary_dir/SHA-256 source"
+safe_git init -q --object-format=sha256 "$sha256_source"
+safe_git -C "$sha256_source" config user.name "Wavo Test"
+safe_git -C "$sha256_source" config user.email "wavo-test@example.invalid"
+safe_git -C "$sha256_source" remote add origin "https://github.com/iRaxe/myWavo.git"
+mkdir -p "$sha256_source/swagger/tag_groups"
+cp "$bundled_contract" "$sha256_source/swagger/tag_groups/application_swagger.json"
+safe_git -C "$sha256_source" add swagger/tag_groups/application_swagger.json
+safe_git -C "$sha256_source" commit -q -m "SHA-256 fixture"
+expect_failure "non-40-hex source commit is rejected" 2 "source HEAD must be a lowercase 40-hex commit SHA" \
+  env WAVO_SOURCE_DIR="$sha256_source" "$copied_updater"
+expect_unchanged "non-40-hex source preserves both destinations"
+
 mkdir -p "$wrong_remote_source/nested source"
 expect_failure "nested source directory is rejected" 2 "WAVO_SOURCE_DIR must be the exact Git toplevel" env WAVO_SOURCE_DIR="$wrong_remote_source/nested source" "$copied_updater"
 expect_unchanged "nested source directory preserves destination"
 
 missing_source="$temporary_dir/missing contract source"
 init_source_repo "$missing_source" "https://github.com/iRaxe/myWavo.git"
+safe_git -C "$missing_source" commit -q --allow-empty -m "empty fixture"
 expect_failure "missing source contract is rejected" 2 "Wavo Swagger source is not a readable regular file" env WAVO_SOURCE_DIR="$missing_source" "$copied_updater"
 expect_unchanged "missing source contract preserves destination"
 
@@ -148,6 +175,7 @@ init_source_repo "$file_symlink_source" "https://github.com/iRaxe/myWavo.git"
 mkdir -p "$file_symlink_source/swagger/tag_groups"
 ln -s "$external_contract" "$file_symlink_source/swagger/tag_groups/application_swagger.json"
 safe_git -C "$file_symlink_source" add swagger/tag_groups/application_swagger.json
+safe_git -C "$file_symlink_source" commit -q -m "symlink fixture"
 expect_failure "external contract file symlink is rejected" 2 "Wavo Swagger source path must not be a symlink" \
   env WAVO_SOURCE_DIR="$file_symlink_source" "$copied_updater"
 expect_unchanged "file symlink source preserves destination"
@@ -160,6 +188,7 @@ init_source_repo "$parent_symlink_source" "https://github.com/iRaxe/myWavo.git"
 mkdir -p "$parent_symlink_source/swagger"
 ln -s "$external_parent" "$parent_symlink_source/swagger/tag_groups"
 safe_git -C "$parent_symlink_source" add swagger/tag_groups
+safe_git -C "$parent_symlink_source" commit -q -m "parent symlink fixture"
 expect_failure "external contract parent symlink is rejected" 2 "Wavo Swagger source path escapes the Wavo source checkout" \
   env WAVO_SOURCE_DIR="$parent_symlink_source" "$copied_updater"
 expect_unchanged "parent symlink source preserves destination"
@@ -168,6 +197,7 @@ untracked_source="$temporary_dir/untracked contract source"
 init_source_repo "$untracked_source" "https://github.com/iRaxe/myWavo.git"
 mkdir -p "$untracked_source/swagger/tag_groups"
 cp "$bundled_contract" "$untracked_source/swagger/tag_groups/application_swagger.json"
+safe_git -C "$untracked_source" commit -q --allow-empty -m "untracked fixture"
 expect_failure "untracked regular contract is rejected" 2 "Wavo Swagger source must be tracked as a regular blob" \
   env WAVO_SOURCE_DIR="$untracked_source" "$copied_updater"
 expect_unchanged "untracked source preserves destination"
@@ -335,6 +365,24 @@ cp "$bundled_contract" "$primary_source/swagger/tag_groups/application_swagger.j
 safe_git -C "$primary_source" add swagger/tag_groups/application_swagger.json
 safe_git -C "$primary_source" commit -q -m "fixture"
 safe_git -C "$primary_source" worktree add -q --detach "$valid_source" HEAD
+captured_source_sha=$(safe_git -C "$valid_source" rev-parse HEAD)
+
+# Move the source checkout to a different clean commit immediately after the
+# updater captures commit A. Looking up the tree through mutable HEAD would
+# pair A's provenance with B's bytes; immutable lookup must instead fail closed.
+printf '\n' >>"$primary_source/swagger/tag_groups/application_swagger.json"
+safe_git -C "$primary_source" add swagger/tag_groups/application_swagger.json
+safe_git -C "$primary_source" commit -q -m "moved HEAD fixture"
+moved_source_sha=$(safe_git -C "$primary_source" rev-parse HEAD)
+race_updater="$workspace/scripts/update-swagger-head-race.sh"
+sed "s|# All subsequent commit-tree reads must use this captured immutable object ID.|safe_git -C \"\$source_root\" reset --hard '$moved_source_sha' >/dev/null|" \
+  "$updater" >"$race_updater"
+chmod +x "$race_updater"
+expect_failure "source HEAD movement cannot split contract provenance" 2 \
+  "Wavo Swagger source bytes must match the recorded source commit" \
+  env WAVO_SOURCE_DIR="$valid_source" "$race_updater"
+expect_unchanged "source HEAD movement preserves both destinations"
+safe_git -C "$valid_source" reset --hard "$captured_source_sha" >/dev/null
 
 # A private copy with the production proxy constant replaced proves that
 # dependency/toolchain acquisition failure is terminal before destination IO.
@@ -351,6 +399,11 @@ if ! cmp -s "$bundled_contract" "$destination"; then
   fail "valid linked-worktree contract is copied"
 fi
 pass "valid linked-worktree contract is copied"
+expected_source_sha=$(safe_git -C "$valid_source" rev-parse HEAD)
+if [ "$(cat "$source_destination")" != "mywavo $expected_source_sha" ]; then
+  fail "valid linked-worktree provenance is copied"
+fi
+pass "valid linked-worktree provenance is copied"
 if [ "$(find "$destination" -prune -perm 0644 -print)" != "$destination" ]; then
   fail "updated contract mode is 0644"
 fi
@@ -364,6 +417,10 @@ if ! cmp -s "$bundled_contract" "$destination"; then
   fail "Git index and object overrides are ignored"
 fi
 pass "Git index and object overrides are ignored"
+if [ "$(cat "$source_destination")" != "mywavo $expected_source_sha" ]; then
+  fail "Git overrides cannot influence source provenance"
+fi
+pass "Git overrides cannot influence source provenance"
 
 if find "$(dirname "$destination")" -name '.application_swagger.json.tmp.*' -print | grep -q .; then
   fail "updater leaves no temporary files"
