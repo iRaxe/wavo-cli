@@ -204,27 +204,20 @@ safe_git -C "$invalid_source" commit -q -m "invalid contract fixture"
 expect_failure "invalid contract is rejected" 2 "Wavo Swagger contract validation failed" env WAVO_SOURCE_DIR="$invalid_source" "$copied_updater"
 expect_unchanged "invalid contract preserves destination byte-for-byte"
 
-# Seed a caller-controlled module cache through the public checksum database,
-# then modify the exact dependency used by the validator. The updater must not
-# execute this injected package or write anything else to the poisoned caches.
-poison_home="$temporary_dir/poison fixture home"
-poison_gopath="$temporary_dir/poison fixture gopath"
+# Seed a caller-controlled module cache through the same isolated automatic
+# toolchain and checksum policy used by production validation, then modify the
+# exact dependency used by the validator. The updater must not execute this
+# injected package or write anything else to the poisoned caches.
+poison_context="$temporary_dir/poison fixture context"
+mkdir -m 0700 "$poison_context"
+safe_go "$poison_context" -C "$temporary_dir" mod download github.com/getkin/kin-openapi@v0.145.0
+poison_gopath="$poison_context/gopath"
 poison_modcache="$poison_gopath/pkg/mod"
-mkdir -p "$poison_home" "$poison_modcache"
-env -i \
-  PATH="$safe_system_path" \
-  LC_ALL=C \
-  HOME="$poison_home" \
-  GOPATH="$poison_gopath" \
-  GOMODCACHE="$poison_modcache" \
-  GOCACHE="$temporary_dir/poison fixture build cache" \
-  GOENV=off \
-  GOFLAGS=-buildvcs=false \
-  GOTOOLCHAIN=local \
-  GOPROXY=https://proxy.golang.org,direct \
-  GOSUMDB=sum.golang.org \
-  "$safe_go_executable" -C "$temporary_dir" mod download github.com/getkin/kin-openapi@v0.145.0
 poison_module="$poison_modcache/github.com/getkin/kin-openapi@v0.145.0"
+if [ ! -d "$poison_module" ]; then
+  fail "poison module fixture is prepared with automatic trusted toolchain acquisition"
+fi
+pass "poison module fixture is prepared with automatic trusted toolchain acquisition"
 poison_marker="$temporary_dir/poisoned-kin-openapi-invoked"
 chmod -R u+w "$poison_module"
 printf '%s\n' \
