@@ -1,45 +1,61 @@
 # wavo-cli
 
-CLI for the Wavo API.
+Source repository for the pre-release Wavo CLI and its bundled AI-agent skill.
+The public installer and release assets must not be described as available until
+the beta release is announced.
 
 ## Build & Run
 
 ```bash
-go build ./cmd/wavo/        # build binary
-mise run dev                     # auto-rebuild on file changes
-./wavo                       # no args → prints help
-./wavo convs                 # plural noun = list
-./wavo conv 123              # `conv 123` = view conv 123
-./wavo conv 123 reply "hi"   # id-first verb dispatch
+mise run build                            # writes ./bin/wavo
+mise run dev                              # auto-rebuild with dev profile
+./bin/wavo                                # no args -> prints help
+./bin/wavo convs                          # plural noun = list
+./bin/wavo conv 123                       # singular + ID = view
+./bin/wavo conv 123 reply "hi"            # ID-first verb dispatch
 ```
 
 ## Project Structure
 
-```
-cmd/wavo/main.go       Entry point: pre-parses id-first grammar, then Kong
+```text
+cmd/wavo/main.go           Entry point: pre-parses ID-first grammar, then Kong
 internal/
-  sdk/                     HTTP client + service modules (conversations, messages, contacts, etc.)
-  cmd/                     Kong command structs with Run(app *App) error
-  config/                  YAML config at ~/.wavo/config.yaml
-  output/                  Printer: text (tabwriter), JSON, CSV formats + quiet mode
+  sdk/                 HTTP client and service modules
+  cmd/                 Kong command structs with Run(app *App) error
+  config/              Nonsecret YAML config and OS-keyring credentials
+  output/              Text, JSON, CSV, and ID-only output
+skills/wavo-cli/       Bundled Wavo AI-agent skill
+docs/BETA.md           Beta operator and customer onboarding
 ```
 
 ## Architecture
 
-- **CLI framework**: Kong (alecthomas/kong) — struct-based command tree with tags
-- **SDK pattern**: `client.Conversations()`, `client.Contacts()`, etc. return service objects
+- **CLI framework**: Kong (alecthomas/kong), using a struct-based command tree
+- **SDK pattern**: `client.Conversations()`, `client.Contacts()`, and other
+  methods return service objects
 - **Command pattern**: each command is a struct with `Run(app *App) error`
-- **App struct** holds `Client`, `Printer`, `Config` — passed to all commands
+- **App struct** holds `Client`, `Printer`, `Config`, and `Version` — passed to
+  commands
 
 ## Key Conventions
 
-- Kong commands: define flags/args as struct fields with tags, implement `Run(app *App) error`
-- Grammar: plural noun = list (`ConvsCmd`), singular noun = parent struct with verb subcommands; each verb's struct holds its own `arg:""` ID. Kong forbids mixing `arg:""` and `cmd:""` siblings, so internally the verb comes before the ID (`conv reply 123 "hi"`).
-- `cmd/wavo/main.go` runs `rewriteIDFirstGrammar` to swap `<noun> <id> <verb>` → `<noun> <verb> <id>` before Kong parses, so users get to type the natural id-first form. A custom `kong.Help` printer flips the help output to match.
-- `default:"withargs"` on the View subcommand routes `wavo conv 123` to `conv view 123`.
-- `skipAuth` in main.go: auth/config commands bypass API client creation
-- `GetRaw()` on Client: for non-account-scoped endpoints (e.g. `/api/v1/profile`)
-- `Config.UserID` is cached on `auth login` and lazy-fetched on first `assign --agent me` so subsequent calls don't need a profile request
+- Kong commands define flags and arguments as tagged struct fields and implement
+  `Run(app *App) error`.
+- Plural nouns list. Singular nouns own verb subcommands, whose structs hold the
+  `arg:""` ID. Kong cannot mix `arg:""` and `cmd:""` siblings, so it parses the
+  verb before the ID internally (`conv reply 123 "hi"`).
+- `cmd/wavo/main.go` runs `rewriteIDFirstGrammar` to swap
+  `<noun> <id> <verb>` to `<noun> <verb> <id>` before Kong parses. Its custom
+  `kong.Help` printer restores ID-first help.
+- `default:"withargs"` routes `wavo conv 123` through the `View` subcommand.
+- `skipAuth` in main.go: `auth`, `config`, `completion`, `me`, `whoami`, and
+  `version` bypass ordinary authenticated client creation
+- `GetRaw()` handles non-account-scoped endpoints such as `/api/v1/profile`.
+- `Config.UserID` is cached on `auth login` and refreshed by `auth status` when
+  a keyring-backed profile changes.
+- Production builds use `~/.wavo/config.yaml` and keyring service `wavo-cli`.
+  `-tags dev` builds use `config.dev.yaml` and `wavo-cli-dev` so development
+  cannot read or remove production credentials.
 
 ## Wavo API Quirks
 
@@ -51,16 +67,35 @@ internal/
 
 ## Commits
 
-Use conventional commits without scope: `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`
+Use conventional commits without scope: `feat:`, `fix:`, `chore:`, `refactor:`,
+or `docs:`.
+
+## Documentation and release status
+
+- `README.md` and `docs/BETA.md` describe an announced-beta flow. Before the
+  announcement, keep an explicit pre-release caveat near installer and package
+  commands.
+- Customer-visible and provider-visible strings must say Wavo. Run
+  `scripts/check-branding.sh`, `scripts/check-branding-test.sh`,
+  `scripts/check-docs.sh`, and `scripts/check-docs-test.sh` after doc or skill
+  changes.
+- Keep the skill grammar aligned with generated `wavo --help`; mutations must
+  retain the per-command, per-target, per-workspace approval boundary.
 
 ## Releasing
 
 Releases are tag-driven and the GitHub release body comes from `CHANGELOG.md`.
 
-1. Move the relevant items from `## [Unreleased]` into a new `## [x.y.z] - YYYY-MM-DD` section in `CHANGELOG.md`, and add its `[x.y.z]: .../compare/...` link at the bottom. (Follow [Keep a Changelog](https://keepachangelog.com/) / SemVer.)
-2. Commit, then push tag `vx.y.z` (must match the changelog version, minus the `v`).
-3. The `release` workflow (`.github/workflows/release.yml`) runs tests, extracts that version's section from `CHANGELOG.md` with awk, and passes it to GoReleaser via `--release-notes`. **If no matching section exists, the release fails fast** — so the changelog must be updated before tagging.
-4. GoReleaser (`.goreleaser.yml`) builds the cross-platform archives, checksums, and the GitHub release; its own `changelog:` block is only a fallback if `--release-notes` is ever dropped.
+1. Add the exact tag version as `## [<version>] - YYYY-MM-DD` in `CHANGELOG.md`.
+   `<version>` may be stable or prerelease SemVer.
+2. Commit, then push tag `v<version>` (the changelog version with a leading
+   `v`). Do not push a tag or publish a release without explicit authorization.
+3. The `release` workflow (`.github/workflows/release.yml`) runs tests, extracts
+   that version's section, and passes it to GoReleaser. A missing matching
+   section fails the release.
+4. GoReleaser (`.goreleaser.yml`) builds cross-platform archives, checksums, and
+   the GitHub release. Its `changelog:` block is a fallback if `--release-notes`
+   is ever removed.
 
 Dry run (local goreleaser must be v2; CI pins `2.15.4`):
 

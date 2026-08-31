@@ -1,130 +1,64 @@
-# internal/cmd - Kong CLI Commands
+# internal/cmd - Wavo command layer
 
-Kong command definitions. Each command is a struct with fields representing flags/args, implementing `Run(app *App) error` to execute the command logic.
+Kong command definitions live here. Each command is a struct of flags and
+arguments with a `Run(app *App) error` method. `CLI` in `cli.go` is the canonical
+command tree; generated `wavo --help` is the canonical public reference.
 
-## Structure
+## Public grammar
 
-**Kong Pattern:**
-```go
-type MyCommand struct {
-    Flag1 string `help:"description" default:"value"`
-    Arg1  string `arg:"" help:"positional argument"`
-}
-
-func (c *MyCommand) Run(app *App) error {
-    // Use app.Client, app.Printer, app.Config
-}
-```
-
-## Command Files
-
-### root.go
-Root CLI command and help. Provides:
-- Version and help display
-- Subcommand dispatcher (auth, config, conversation, message, contact, etc.)
-- Global flags (verbose, format)
-- Help text with command summary
-
-### auth.go
-Authentication setup.
-- `auth login` — save non-secret config to YAML and API token to OS keyring
-- `auth logout` — clear saved config and keyring token
-- `WAVO_API_KEY` overrides saved keyring credentials for CI, coding agents, and temporary sessions
-
-### config.go
-Configuration management.
-- `config show` — display current config
-- `config reset` — clear all settings
-
-### conversation.go
-Conversation queries.
-- `conversation list` — list conversations (filters: assignee_type, status, page)
-- `conversation get <ID>` — single conversation details
-- Output: table, JSON, or CSV via Printer
-
-### message.go
-Message queries.
-- `message list <CONV_ID>` — messages in conversation (pagination via beforeID)
-- `message get <ID>` — single message details
-- Output: formatted text or JSON
-
-### contact.go
-Contact queries.
-- `contact list` — all contacts (paginated)
-- `contact get <ID>` — full contact details with additional attributes
-- Output: table with name, email, phone, or JSON for details
-
-### label.go
-Label queries.
-- `label list` — all labels/tags for account
-- Output: table or JSON
-
-### agent.go
-Agent (team member) queries.
-- `agent list` — all agents with availability status
-- Output: table or JSON
-
-### inbox.go
-Inbox configuration.
-- `inbox list` — all inboxes with channel types
-- Output: table or JSON
-
-### profile.go
-Authenticated user profile.
-- `profile show` — current user details
-- Output: formatted text or JSON
-
-## App Struct
-
-Passed to every command:
-```go
-type App struct {
-    Client   *sdk.Client
-    Printer  *output.Printer
-    Config   *config.Config
-    Version  string
-}
-```
-
-Commands use:
-- `app.Client` for API calls
-- `app.Printer.Print()` to render output (respects --format flag)
-- `app.Config` for cached values (base URL, account ID, etc.)
-
-## Output Formatting
-
-Printer supports three formats:
-- **Text** (default): tabwriter-formatted tables
-- **JSON**: structured JSON objects
-- **CSV**: comma-separated values
-
-Set via `--format json` or `--format csv` on any command.
-
-## CLI Usage Examples
+The Wavo CLI is noun-first and ID-first:
 
 ```bash
-# List conversations
-./wavo conversation list --assignee-type me --status open
-
-# Get single conversation
-./wavo conversation get 123
-
-# List messages in conversation
-./wavo message list 123
-
-# Get contact details
-./wavo contact get 456
-
-# Show authenticated user
-./wavo profile show --format json
+wavo convs
+wavo conv 123
+wavo conv 123 messages
+wavo conv 123 reply "hello"
+wavo contact 456 conversations
 ```
 
-## skipAuth Flag
+Kong internally parses singular commands as verb then ID. `cmd/wavo/main.go`
+rewrites the public `<noun> <id> <verb>` form before parsing and rewrites help
+back to the public form. Keep its verb tables in sync when adding singular
+commands.
 
-In `main.go`, `auth` and `config` commands are marked with `skipAuth: true` — they don't require an API client. Other commands fail gracefully if auth is not configured.
+## Command tree
 
-## TODO
+- Lists: `convs`, `contacts`, `inboxes`, `agents`, `labels`, `teams`, `hcs`.
+- Conversation reads: `conv <id>`, `messages`, `contact`.
+- Conversation writes: `reply`, `resolve`, `open`, `pending`, `snooze`,
+  `assign`, `unassign`, `label`, `priority`.
+- Contact reads: `contact <id>`, `contact <id> conversations`.
+- Help centers: `hc list`, `hc default`, `hc articles`, `hc article`.
+- Identity and setup: `me`, `whoami`, `auth`, `config`, `completion`, `version`.
+- Escape hatch: `api <path>` for an authenticated raw Wavo API request.
 
-- Implement `conversation create` for ticket creation
-- Add bulk export (all conversations to CSV)
-- Add filtering by label, agent, date range
+Conversation writes use `withConvLock` and fail fast when another Wavo process
+is mutating the same conversation. Do not bypass that lock for new conversation
+mutations.
+
+## App and output
+
+`App` provides the SDK client, printer, config, and version. Root flags are
+`--output/-o`, `--account/-a`, `--quiet/-q`, `--no-color`, and `--verbose/-v`.
+Text is the human default; JSON preserves SDK response structures; CSV applies
+to table output; quiet list output emits the first column, normally IDs.
+
+`auth`, `config`, `completion`, `version`, `me`, and `whoami` bypass ordinary
+authenticated client construction. `auth status`, `me`, and `whoami` share the
+same status implementation. `WAVO_API_KEY` overrides the OS keyring for
+headless use; never write it to YAML or logs.
+
+## Kong pattern
+
+```go
+type MyCmd struct {
+  ID int `arg:"" help:"Resource ID."`
+}
+
+func (c *MyCmd) Run(app *App) error {
+  return nil
+}
+```
+
+Add targeted command and parser tests for grammar, side effects, output shape,
+and failure behavior. Use Wavo-only fixture strings in customer-visible output.

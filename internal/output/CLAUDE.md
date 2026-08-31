@@ -1,66 +1,84 @@
-# internal/output - Output Formatting
+# internal/output - Wavo output rendering
 
-Multi-format output printer for CLI commands. Supports text (tabwriter), JSON, CSV, and quiet modes.
+`output.go` contains the CLI's output printer and text-sanitization helpers.
+There are no separate printer implementations or struct-tag-driven renderers.
 
-## Files
+## Public interface
 
-### printer.go
-Main Printer struct and formatting logic. Provides:
-- `Printer` struct with format preference (text/json/csv/quiet)
-- `Print()` — generic output that respects format flag
-- `PrintTable()` — render structs as tabwriter tables
-- `PrintJSON()` — pretty-print as JSON
-- `PrintCSV()` — comma-separated values (all fields)
-- `Quiet()` — suppress output (used in some commands)
+`Printer` has four exported fields:
 
-## Format Modes
+- `Format string`: `text`, `json`, or `csv`; unknown values use text-table
+  rendering in `PrintTable`.
+- `Writer io.Writer`: destination for normal output; `NewPrinter` defaults it
+  to `os.Stdout`.
+- `NoColor bool`: carries the root `--no-color` setting. `output.go` does not
+  itself add color.
+- `Quiet bool`: changes `PrintTable` to emit only each nonempty row's first
+  column.
 
-**Text (default):**
-- Uses Go's `tabwriter` for aligned columns
-- Struct tags `table:"header"` define column names
-- Suitable for human reading in terminal
+Constructors and rendering methods:
 
-**JSON:**
-- Pretty-printed with indentation
-- Useful for piping to other tools
-- Set via `--format json`
+- `NewPrinter(format string, noColor, quiet bool) *Printer`
+- `(*Printer).PrintTable(headers []string, rows [][]string)`
+- `(*Printer).PrintJSON(value interface{})`
+- `(*Printer).PrintDetail(pairs []KeyValue)`
 
-**CSV:**
-- All fields exported as comma-separated values
-- Includes header row
-- Suitable for import to spreadsheets
-- Set via `--format csv`
+`KeyValue` contains exported `Key` and `Value` string fields. Rendering methods
+do not return errors. JSON encoding and CSV flush failures are reported to
+stderr; ordinary writer errors are otherwise best-effort.
 
-**Quiet:**
-- Suppresses output entirely
-- Useful for scripts checking exit codes
-- Set via `--quiet` flag
-
-## Usage in Commands
+Conceptual command-layer usage:
 
 ```go
-func (c *MyCommand) Run(app *App) error {
-    data, _ := app.Client.SomeService().List()
-    return app.Printer.Print(data)
+package cmd
+
+import (
+  "io"
+
+  "github.com/iRaxe/wavo-cli/internal/output"
+)
+
+func renderInbox(w io.Writer) {
+  printer := output.NewPrinter("text", false, false)
+  printer.Writer = w
+  printer.PrintTable(
+    []string{"ID", "Name"},
+    [][]string{{"5", "Wavo Support"}},
+  )
+  printer.PrintDetail([]output.KeyValue{{Key: "ID", Value: "5"}})
 }
 ```
 
-The Printer automatically selects format based on initialization.
+## Rendering contracts
 
-## Table Struct Tags
+`PrintTable` selects behavior from `Printer`:
 
-Define output columns with struct tags:
-```go
-type Item struct {
-    ID   int    `table:"ID"`
-    Name string `table:"Name"`
-    Status string `table:"Status"`
-}
-```
+- Quiet mode takes precedence over `Format` and prints the sanitized first
+  cell of each nonempty row, one per line.
+- Text uses `tabwriter`, prints the supplied headers, and sanitizes every row
+  cell with `SanitizeText`.
+- JSON converts each row to a `map[string]string` keyed by the corresponding
+  header, then delegates to `PrintJSON`.
+- CSV writes the supplied headers and rows with `encoding/csv`. Row cells
+  beginning with `=`, `+`, `-`, or `@` receive a leading apostrophe to prevent
+  spreadsheet formula execution; headers are written as supplied.
 
-## TODO
+`PrintJSON` pretty-prints the supplied value with two-space indentation. It is
+the full-fidelity path used by commands that expose SDK response structures; it
+does not consult `Quiet` or sanitize values into human text.
 
-- Add table header customization per command
-- Implement YAML output format
-- Add column selection (--columns id,name)
-- Implement filtering for table output
+`PrintDetail` accepts explicit `[]KeyValue` pairs. In JSON mode it emits a
+`map[string]string`. Otherwise it aligns keys and sanitizes values. It does not
+consult `Quiet`.
+
+Some conversation mutation commands implement their own quiet ID output in the
+command layer. Do not infer that every printer method or detail view is silent
+when `Quiet` is true.
+
+## Sanitization
+
+`SanitizeText` removes ANSI/control sequences, other Unicode control characters,
+and invalid UTF-8 bytes from human-readable output. Text tables, text details,
+and quiet table cells use it. Full-fidelity JSON deliberately preserves the
+underlying data, while CSV applies formula escaping rather than terminal-text
+sanitization.

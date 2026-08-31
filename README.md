@@ -1,87 +1,123 @@
 # Wavo CLI
 
-CLI for [Wavo](https://my.wavo.it) — manage conversations, send replies, and run common workflows from your terminal.
+Manage Wavo conversations, contacts, assignments, and help-center content from
+the terminal.
 
 ## Install
 
-**macOS / Linux** — install script (detects OS/arch, fetches the matching release binary, verifies SHA256):
-
 ```bash
-curl -fsSL https://my.wavo.it/install-cli | sh
-```
-
-For a specific version or Windows, see the [install docs](https://github.com/iRaxe/wavo-cli/releases).
-
-## Setup
-
-```bash
+curl -fsSL https://my.wavo.it/install-cli | env WAVO_VERSION=v0.1.0-beta.1 sh
 wavo auth login
 ```
 
-You'll be prompted for your **Base URL**, **API Key**, and **Account ID**. Credentials are validated before saving. Non-secret config lives at `~/.wavo/config.yaml`; the API key is stored in your OS keyring. For CI or headless environments, set `WAVO_API_KEY` to override the keyring.
+The installer URL and release assets become available with the announced beta
+release. Until that announcement, treat these commands as the beta install flow,
+not as a claim that a public installer is already live.
+The beta command pins its announced prerelease tag because the stable `latest`
+channel does not select prereleases. A later announced stable release may use
+the unpinned installer channel.
 
-## Agent Skill
+Interactive login validates the selected Wavo workspace and stores the token
+only in the operating-system keyring. `~/.wavo/config.yaml` contains nonsecret
+settings such as the base URL, workspace ID, and help-center defaults; it never
+contains the token. See the [beta onboarding guide](docs/BETA.md) for supported
+platforms, verification, revocation, and support guidance.
 
-If you use Claude Code, Cursor, or another AI coding assistant, install the agent skill so it knows the CLI's grammar and safety rules before sending customer-visible replies:
+Use `wavo config view` as the nonmutating preflight before workspace reads.
+`wavo auth status` and its `me`/`whoami` aliases are explicit identity checks;
+with a keyring login they may refresh the nonsecret cached user ID in local
+config, so they are not pure-read preflight commands.
+
+## AI-agent skill
+
+Install the bundled Wavo skill after the beta package is announced:
 
 ```bash
-npx skills add iRaxe/wavo-cli              # current project
-npx skills add iRaxe/wavo-cli --global     # all projects
+npx skills add iRaxe/wavo-cli
 ```
 
-See the [agent skill docs](https://github.com/iRaxe/wavo-cli) for details.
+Agents may perform pure-read inspection within the user's requested workspace
+after confirming it with `wavo config view`, without write approval. Every reply
+or private note, assignment or unassignment, status or snooze change, label
+change, priority change, contact mutation, or mutating raw API call requires
+explicit approval immediately before execution. The agent must show the exact
+workspace, target, effect, and command before that approval; an earlier or
+blanket approval is not enough.
 
-## Usage
+## Command grammar
 
-The CLI uses a simple noun grammar:
+Wavo uses noun-first, ID-first commands:
 
-- **Plural noun = list:** `wavo convs`, `wavo contacts`, `wavo agents`
-- **`<noun> <id>`** views: `wavo conv 123`
-- **`<noun> <id> <verb>`** acts: `wavo conv 123 reply "thanks"` — id before verb, the way you'd say it.
+- A plural noun lists resources: `wavo convs`, `wavo contacts`, `wavo agents`.
+- A singular noun plus ID views one resource: `wavo conv 123`.
+- A singular noun, ID, then verb acts on it: `wavo conv 123 reply "Thanks"`.
 
 ```bash
-wavo convs                                 # Open conversations assigned to you
-wavo convs --assignee all --inbox 5        # All conversations in inbox 5
-wavo convs --query "refund"                # Search by message content
+wavo convs                                  # Your open conversations
+wavo convs --assignee all --inbox 5         # Open conversations in inbox 5
+wavo convs --query "refund" -o json         # Search message content
 
-wavo conv 123                              # View
+wavo conv 123                               # View a conversation
+wavo conv 123 messages -o json              # Read its messages
 wavo conv 123 reply "Looking into it"
-wavo conv 123 reply "internal note" --private
-wavo conv 123 resolve                      # Or: open, pending, snooze
-wavo conv 123 assign --agent me            # Or: --agent alice, --agent 42, --team 7
-wavo conv 123 label billing,urgent
-wavo conv 123 priority urgent              # urgent | high | medium | low | none
+wavo conv 123 reply "Internal context" --private
+wavo conv 123 resolve                       # Also: open, pending, snooze
+wavo conv 123 snooze --until 7d
+wavo conv 123 assign --agent me             # Or: --agent 42, --team 7
+wavo conv 123 unassign
+wavo conv 123 label billing,urgent          # Replaces existing labels
+wavo conv 123 priority urgent               # urgent|high|medium|low|none
 
-wavo contacts --search "john"
-wavo contact 456 conversations
+wavo contacts --search "customer@example.com" -o json
+wavo contact 456
+wavo contact 456 conversations -o json
 
-wavo inboxes / agents / labels / teams     # List
-wavo me                                    # Your profile
+wavo inboxes -o json
+wavo inbox 5 -o json
+wavo agents -o json
+wavo labels -o json
+wavo teams -o json
 
-wavo hcs                                   # List help centers
-wavo hc default wavo-support       # Save default help center and locale
-wavo hc articles --query "account"
-wavo hc articles --category getting-started
-wavo hc article create-a-agent-bot
-wavo hc articles --portal other-help-center --locale fr
+wavo hcs -o json
+wavo hc default                             # Show the local default
+wavo hc articles --portal support --locale en --query "account" -o json
+wavo hc article create-an-account --portal support -o json
 
-wavo api /conversations/123                # Expands to /api/v1/accounts/<id>/conversations/123
-wavo api -X PATCH /conversations/123 --data '{"status":"open"}'
+wavo api /conversations/123                 # GET, account-relative
+wavo api --exact /api/v1/profile            # GET, exact path
+wavo api -X PATCH /conversations/123 --data '{"priority":"high"}'
 ```
 
-Run `wavo --help` or see the [full command reference](https://github.com/iRaxe/wavo-cli).
+Run `wavo --help` or `wavo <command> --help` for the generated reference.
 
-## Output Formats
+## Output and scripting
 
-`-o text` (default), `-o json`, `-o csv`, or `-q` (IDs only, for scripting):
+Text is the human-readable default. Use `-o json` for full-fidelity structured
+output, `-o csv` for tables, and `-q` for ID-only list output. The CLI never
+automatically switches formats when piped. Successful commands exit `0`; errors
+are written to stderr and return a nonzero exit code.
 
 ```bash
-wavo convs -o json | jq '.data.payload[].id'
-wavo convs -q | xargs -I{} wavo conv view {}
+wavo convs --assignee me -s open -o json \
+  | jq '.data.payload[] | {id, status}'
+wavo contacts --search "customer@example.com" -o json \
+  | jq '.payload[] | {id, name}'
+wavo convs --assignee all -s pending -q
 ```
 
-For piping, batching, and CI workflows, see the [scripting guide](https://github.com/iRaxe/wavo-cli).
+`WAVO_API_KEY` is available as a headless override, but environment credentials
+must never be placed in command arguments, prompts, logs, or shell tracing.
+Never paste a Wavo token into a prompt, ticket, chat message, command argument,
+or diagnostic report.
 
-## License
+A keyring credential is bound to the Wavo instance and workspace selected at
+login; `--account` cannot switch that normal login to another workspace. Run
+`wavo auth login` and select the other workspace instead. In headless use,
+`--account` is allowed only with a separately verified `WAVO_API_KEY` authorized
+for that exact workspace. Never carry IDs or returned data between workspaces.
 
-MIT
+## Project information
+
+- [Beta onboarding and support](docs/BETA.md)
+- [Third-party notices](NOTICE.md)
+- [MIT license](LICENSE)

@@ -25,6 +25,8 @@ jobs:
         run: |
           ./scripts/check-branding.sh
           ./scripts/check-branding-test.sh
+          ./scripts/check-docs.sh
+          ./scripts/check-docs-test.sh
           ./scripts/update-swagger-test.sh
           mkdir -p ./bin
           go build -trimpath -o ./bin/wavo ./cmd/wavo

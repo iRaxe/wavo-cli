@@ -1,19 +1,25 @@
 # internal/config - Configuration Management
 
-YAML-based configuration persistence for non-secret account settings. Configuration is stored in `~/.wavo/config.yaml` and auto-loaded on startup. API keys are resolved from `WAVO_API_KEY` first, then the OS keyring.
+YAML persistence holds nonsecret account settings. Production configuration is
+stored in `~/.wavo/config.yaml`. API keys resolve from `WAVO_API_KEY` first, then
+the operating-system keyring.
 
 ## Files
 
 ### config.go
+
 Configuration struct and file I/O. Provides:
-- `Config` struct with BaseURL and AccountID
-- `Load()` — read from `~/.wavo/config.yaml`, create if missing
+
+- `Config` with base URL, account/user IDs, and help-center defaults
+- `Load()` — read the active profile config; return `nil` when it is absent
 - `Save()` — write non-secret YAML
 - Validation: ensures BaseURL and AccountID are set before API calls
 - Error handling: distinguishes between missing file and parse errors
 
 ### credentials.go
+
 Credential resolution and OS keyring storage. Provides:
+
 - `ResolveAPIKey()` — `WAVO_API_KEY` first, then OS keyring
 - `SaveAPIKey()` — write validated login token to keyring
 - `DeleteAPIKey()` — remove saved keyring token on logout
@@ -24,10 +30,10 @@ Credential resolution and OS keyring storage. Provides:
 build tag (`profile_prod.go` for `//go:build !dev`, `profile_dev.go` for
 `//go:build dev`):
 
-| | config file | keyring service | `config.IsDev` |
-|---|---|---|---|
-| prod (default `go build`, releases) | `~/.wavo/config.yaml` | `wavo-cli` | `false` |
-| dev (`go build -tags dev`, `mise run dev`) | `~/.wavo/config.dev.yaml` | `wavo-cli-dev` | `true` |
+| Profile | Config file | Keyring service | `config.IsDev` |
+| --- | --- | --- | --- |
+| Production | `~/.wavo/config.yaml` | `wavo-cli` | `false` |
+| Dev (`-tags dev`) | `~/.wavo/config.dev.yaml` | `wavo-cli-dev` | `true` |
 
 A dev build keeps its own credentials, so iterating on the CLI never reads or
 clobbers the production login. The keyring **service** (not just the entry name)
@@ -42,11 +48,16 @@ out. `config view` shows a `Profile: dev` line on dev builds.
 ```yaml
 base_url: https://my.wavo.it
 account_id: 47
+user_id: 123
+help_center:
+  default_portal_slug: support
+  default_locale: en
 ```
 
 ## Usage
 
 In `main.go`:
+
 ```go
 cfg, err := config.Load()
 if err != nil {
@@ -68,9 +79,8 @@ client := sdk.NewClient(cfg.BaseURL, apiKey, cfg.AccountID)
 
 ## File Permissions
 
-Config directory is created with `0700`; config file is created with `0600`. API keys are not written to YAML.
+The config directory is created with `0700`; config files use `0600`. API keys
+are not written to YAML.
 
-## TODO
-
-- Implement config migration for schema changes
-- Add profile support (multiple saved credentials)
+The production and development build profiles are fixed compile-time profiles,
+not user-selectable multi-account profiles.
