@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,9 +11,98 @@ import (
 	"github.com/iRaxe/wavo-cli/internal/brand"
 )
 
+func TestSaveWithReplaceFailurePreservesExistingConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	oldConfig := &Config{BaseURL: brand.DefaultBaseURL, AccountID: 7, UserID: 11}
+	if err := Save(oldConfig); err != nil {
+		t.Fatalf("Save(old) error = %v", err)
+	}
+	path, err := ConfigPath()
+	if err != nil {
+		t.Fatalf("ConfigPath() error = %v", err)
+	}
+	oldBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(old) error = %v", err)
+	}
+
+	replaceErr := errors.New("forced replacement failure")
+	replaceCalled := false
+	err = saveWithReplace(&Config{BaseURL: "https://new.wavo.example", AccountID: 9, UserID: 22}, func(tempPath, targetPath string) error {
+		replaceCalled = true
+		if filepath.Dir(tempPath) != filepath.Dir(targetPath) {
+			t.Fatalf("temp and target are not in the same directory: %q %q", tempPath, targetPath)
+		}
+		assertSecureConfigFile(t, tempPath)
+		return replaceErr
+	})
+	if !replaceCalled || !errors.Is(err, replaceErr) {
+		t.Fatalf("saveWithReplace() error = %v, replaceCalled=%v", err, replaceCalled)
+	}
+
+	currentBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(current) error = %v", err)
+	}
+	if !bytes.Equal(currentBytes, oldBytes) {
+		t.Fatalf("existing config changed after failed replacement:\nold=%q\nnew=%q", oldBytes, currentBytes)
+	}
+	loaded, err := Load()
+	if err != nil || loaded == nil || *loaded != *oldConfig {
+		t.Fatalf("old config not usable after failed replacement: cfg=%#v err=%v", loaded, err)
+	}
+	assertNoConfigTemps(t)
+}
+
+func TestSaveAtomicallyReplacesConfigWithSecureMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := Save(&Config{BaseURL: brand.DefaultBaseURL, AccountID: 7}); err != nil {
+		t.Fatalf("Save(old) error = %v", err)
+	}
+	path, err := ConfigPath()
+	if err != nil {
+		t.Fatalf("ConfigPath() error = %v", err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatalf("Chmod(old) error = %v", err)
+	}
+
+	want := &Config{BaseURL: "https://new.wavo.example", AccountID: 9, UserID: 22}
+	if err := Save(want); err != nil {
+		t.Fatalf("Save(new) error = %v", err)
+	}
+	loaded, err := Load()
+	if err != nil || loaded == nil || *loaded != *want {
+		t.Fatalf("Load() = %#v, %v; want %#v", loaded, err, want)
+	}
+	assertSecureConfigFile(t, path)
+	assertSecureConfigDirectory(t)
+	assertNoConfigTemps(t)
+}
+
+func assertNoConfigTemps(t *testing.T) {
+	t.Helper()
+	dir, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir() error = %v", err)
+	}
+	matches, err := filepath.Glob(filepath.Join(dir, "."+configFileName+".tmp-*"))
+	if err != nil {
+		t.Fatalf("Glob(temp files) error = %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("temporary config files remain: %v", matches)
+	}
+}
+
 func TestConfigDirUsesWavoDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	dir, err := ConfigDir()
 	if err != nil {

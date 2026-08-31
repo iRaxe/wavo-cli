@@ -64,10 +64,15 @@ func (c *HCDefaultCmd) Run(app *App) error {
 		if app.Config == nil {
 			return fmt.Errorf("config is not loaded")
 		}
-		app.Config.HelpCenter = config.HelpCenterConfig{}
-		if err := config.Save(app.Config); err != nil {
+		snapshot := *app.Config
+		updated, err := updateConfigForAuth(&snapshot, func(current *config.Config) error {
+			current.HelpCenter = config.HelpCenterConfig{}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
+		app.Config = updated
 		_, _ = fmt.Fprintln(app.Printer.Writer, "Cleared default help center.")
 		return nil
 	}
@@ -75,22 +80,27 @@ func (c *HCDefaultCmd) Run(app *App) error {
 	if strings.TrimSpace(c.Slug) == "" {
 		return renderHelpCenterDefault(app)
 	}
+	if app.Config == nil {
+		return fmt.Errorf("config is not loaded")
+	}
+	snapshot := *app.Config
 
 	portal, err := findHelpCenterPortal(app, c.Slug)
 	if err != nil {
 		return err
 	}
 
-	if app.Config == nil {
-		return fmt.Errorf("config is not loaded")
-	}
-	app.Config.HelpCenter = config.HelpCenterConfig{
-		DefaultPortalSlug: portal.Slug,
-		DefaultLocale:     portalDefaultLocale(portal),
-	}
-	if err := config.Save(app.Config); err != nil {
+	updated, err := updateConfigForAuth(&snapshot, func(current *config.Config) error {
+		current.HelpCenter = config.HelpCenterConfig{
+			DefaultPortalSlug: portal.Slug,
+			DefaultLocale:     portalDefaultLocale(portal),
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
+	app.Config = updated
 
 	_, _ = fmt.Fprintf(app.Printer.Writer, "Default help center set to %s", portal.Slug)
 	if app.Config.HelpCenter.DefaultLocale != "" {

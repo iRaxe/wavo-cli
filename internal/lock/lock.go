@@ -1,6 +1,4 @@
-// Package lock provides per-conversation advisory file locks so that
-// concurrent chatwoot processes on the same machine don't run mutating
-// commands (e.g. reply) against the same conversation at once.
+// Package lock provides advisory file locks for Wavo CLI mutations.
 package lock
 
 import (
@@ -14,9 +12,9 @@ import (
 )
 
 // ErrLocked is returned when another process already holds the lock.
-var ErrLocked = errors.New("conversation is locked by another chatwoot process")
+var ErrLocked = errors.New("resource is locked by another Wavo process")
 
-// Lock is a held per-conversation lock. Release it with Release.
+// Lock is a held advisory lock. Release it with Release.
 // The OS releases it automatically if the process exits or crashes.
 type Lock struct {
 	f *os.File
@@ -32,18 +30,36 @@ func AcquireConversation(id int) (*Lock, error) {
 	return acquireAt(filepath.Join(cfgDir, "locks"), id)
 }
 
+// AcquireAuth takes the active build profile's exclusive non-blocking lock for
+// config and credential mutations.
+func AcquireAuth() (*Lock, error) {
+	cfgDir, err := config.ConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	name := "auth.lock"
+	if config.IsDev {
+		name = "auth-dev.lock"
+	}
+	return acquireFileAt(filepath.Join(cfgDir, "locks"), name, "Wavo authentication")
+}
+
 func acquireAt(dir string, id int) (*Lock, error) {
+	return acquireFileAt(dir, fmt.Sprintf("conv-%d.lock", id), fmt.Sprintf("conversation %d", id))
+}
+
+func acquireFileAt(dir, name, subject string) (*Lock, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	path := filepath.Join(dir, fmt.Sprintf("conv-%d.lock", id))
+	path := filepath.Join(dir, name)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}
 	if err := tryLock(f); err != nil {
 		_ = f.Close()
-		return nil, fmt.Errorf("conversation %d: %w", id, err)
+		return nil, fmt.Errorf("%s: %w", subject, err)
 	}
 	// Best-effort PID marker for debugging; the flock is the real lock.
 	_ = f.Truncate(0)

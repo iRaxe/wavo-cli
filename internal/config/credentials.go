@@ -80,6 +80,42 @@ func SaveAPIKey(cfg *Config, apiKey string) error {
 	return nil
 }
 
+// SaveAPIKeyWithRollback replaces the active profile's credential and returns
+// a rollback that restores the exact previous entry, or removes only the entry
+// created by this save. Other entries in the Wavo keyring service are untouched.
+func SaveAPIKeyWithRollback(cfg *Config, apiKey string) (func() error, error) {
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	if cfg == nil || !cfg.IsValid() {
+		return nil, fmt.Errorf("valid config is required to save API key")
+	}
+
+	previous, err := keyring.Get(keyringService, apiKeyKeyringEntry)
+	hadPrevious := err == nil
+	if err != nil && !errors.Is(err, keyring.ErrNotFound) {
+		return nil, fmt.Errorf("failed to read previous API key from keyring: %w", err)
+	}
+	if err := saveAPIKeyToKeyring(cfg, apiKey); err != nil {
+		return nil, fmt.Errorf("failed to save API key to keyring: %w", err)
+	}
+
+	rollback := func() error {
+		if hadPrevious {
+			if err := keyring.Set(keyringService, apiKeyKeyringEntry, previous); err != nil {
+				return fmt.Errorf("failed to restore previous API key in keyring: %w", err)
+			}
+			return nil
+		}
+		if err := keyring.Delete(keyringService, apiKeyKeyringEntry); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			return fmt.Errorf("failed to remove new API key from keyring: %w", err)
+		}
+		return nil
+	}
+	return rollback, nil
+}
+
 func saveAPIKeyToKeyring(cfg *Config, apiKey string) error {
 	credential := savedCredential{
 		BaseURL:   normalizeBaseURL(cfg.BaseURL),

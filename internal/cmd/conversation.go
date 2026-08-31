@@ -474,23 +474,38 @@ func (c *ConvContactCmd) Run(app *App) error {
 // Helpers.
 // -----------------------------------------------------------------------------
 
+var errResolveAgentProfile = errors.New("Wavo profile unavailable; retry the command or run 'wavo auth login'")
+
 func resolveAgent(app *App, ref string) (int, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return 0, fmt.Errorf("agent reference required")
 	}
 	if strings.EqualFold(ref, "me") {
-		if app.Config != nil && app.Config.UserID != 0 {
+		environmentCredential := app.CredentialSource == config.CredentialSourceEnvironment
+		if !environmentCredential && app.Config != nil && app.Config.UserID != 0 {
 			return app.Config.UserID, nil
+		}
+		var snapshot *config.Config
+		if app.Config != nil {
+			copy := *app.Config
+			snapshot = &copy
 		}
 		profile, err := app.Client.Profile().Get()
 		if err != nil {
-			return 0, fmt.Errorf("cannot resolve 'me': %w", err)
+			return 0, errResolveAgentProfile
 		}
-		if app.Config != nil {
-			app.Config.UserID = profile.ID
-			_ = config.Save(app.Config)
+		if environmentCredential {
+			return profile.ID, nil
 		}
+		updated, err := updateConfigForAuth(snapshot, func(current *config.Config) error {
+			current.UserID = profile.ID
+			return nil
+		})
+		if err != nil {
+			return 0, fmt.Errorf("cannot safely resolve 'me' for the current Wavo login; retry the command: %w", err)
+		}
+		app.Config = updated
 		return profile.ID, nil
 	}
 	if id, err := strconv.Atoi(ref); err == nil {

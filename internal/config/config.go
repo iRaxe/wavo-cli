@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,6 +62,10 @@ func Load() (*Config, error) {
 }
 
 func Save(cfg *Config) error {
+	return saveWithReplace(cfg, replaceFile)
+}
+
+func saveWithReplace(cfg *Config, replace func(source, destination string) error) error {
 	dir, err := ConfigDir()
 	if err != nil {
 		return err
@@ -73,23 +78,54 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("failed to secure config directory: %w", err)
 	}
 
-	path, err := ConfigPath()
-	if err != nil {
-		return err
-	}
+	path := filepath.Join(dir, configFileName)
 
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to serialize config: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
+	temp, err := os.CreateTemp(dir, "."+configFileName+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary config: %w", err)
 	}
-	if err := os.Chmod(path, 0600); err != nil {
-		return fmt.Errorf("failed to secure config file: %w", err)
+	tempPath := temp.Name()
+	closed := false
+	defer func() {
+		if !closed {
+			_ = temp.Close()
+		}
+		_ = os.Remove(tempPath)
+	}()
+
+	if err := temp.Chmod(0o600); err != nil {
+		return fmt.Errorf("failed to secure temporary config: %w", err)
+	}
+	written, err := temp.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write temporary config: %w", err)
+	}
+	if written != len(data) {
+		return fmt.Errorf("failed to write temporary config: %w", io.ErrShortWrite)
+	}
+	if err := temp.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temporary config: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary config: %w", err)
+	}
+	closed = true
+	if err := replace(tempPath, path); err != nil {
+		return fmt.Errorf("failed to replace config: %w", err)
 	}
 
+	// Replacement is the commit point. Directory syncing improves durability on
+	// filesystems that support it, but failure must not report the committed save
+	// as failed and trigger credential rollback.
+	if directory, err := os.Open(dir); err == nil {
+		_ = directory.Sync()
+		_ = directory.Close()
+	}
 	return nil
 }
 

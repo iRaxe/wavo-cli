@@ -2,107 +2,242 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/lock"
 	"github.com/iRaxe/wavo-cli/internal/output"
 	"github.com/iRaxe/wavo-cli/internal/sdk"
 	"golang.org/x/term"
 )
 
 type AuthCmd struct {
-	Login  AuthLoginCmd  `cmd:"" help:"Login with your Chatwoot credentials."`
+	Login  AuthLoginCmd  `cmd:"" help:"Login with your Wavo credentials."`
 	Logout AuthLogoutCmd `cmd:"" help:"Logout and remove saved credentials."`
 	Status AuthStatusCmd `cmd:"" help:"Show current authentication status."`
 }
 
 type AuthLoginCmd struct{}
 
+var (
+	errLoginProfile  = errors.New("Wavo authentication failed. Verify credentials or run 'wavo auth login'.")
+	errStatusProfile = errors.New("Wavo profile unavailable. Check availability or run 'wavo auth login'.")
+)
+
 func (c *AuthLoginCmd) Run(app *App) error {
-	reader := bufio.NewReader(os.Stdin)
-
-	fmt.Println("Chatwoot CLI Login")
-	fmt.Println("==================")
-
-	fmt.Print("Base URL (default: https://app.chatwoot.com): ")
-	baseURL, _ := reader.ReadString('\n')
-	baseURL = strings.TrimSpace(baseURL)
-	if baseURL == "" {
-		baseURL = "https://app.chatwoot.com"
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return fmt.Errorf("interactive login requires a terminal; set %s for headless use", config.APIKeyEnv)
 	}
+	reader := bufio.NewReader(os.Stdin)
+	return c.login(app, reader, os.Stdout, config.IsDev, func() (string, error) { return readAPIKey(reader) })
+}
 
-	apiKey, err := readAPIKey(reader)
+func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHTTP bool, readToken func() (string, error)) error {
+	bufferedReader := bufio.NewReader(reader)
+
+	fmt.Fprintln(writer, "Wavo CLI Login")
+	fmt.Fprintln(writer, "==============")
+
+	fmt.Fprintf(writer, "Base URL (default: %s): ", brand.DefaultBaseURL)
+	baseURLInput, err := bufferedReader.ReadString('\n')
+	if err != nil && baseURLInput == "" {
+		return fmt.Errorf("failed to read base URL: %w", err)
+	}
+	baseURL, err := normalizeLoginBaseURL(baseURLInput, allowHTTP)
 	if err != nil {
 		return err
 	}
 
-	fmt.Print("Account ID: ")
-	accountIDStr, _ := reader.ReadString('\n')
-	accountIDStr = strings.TrimSpace(accountIDStr)
-
-	accountID, err := strconv.Atoi(accountIDStr)
+	apiKey, err := readToken()
 	if err != nil {
-		return fmt.Errorf("invalid account ID: %w", err)
+		return err
+	}
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return fmt.Errorf("API key is required")
 	}
 
-	cfg := &config.Config{
-		BaseURL:   baseURL,
-		AccountID: accountID,
-	}
-
-	if !cfg.IsValid() {
-		return fmt.Errorf("all fields are required")
-	}
-
-	// Validate credentials by fetching profile
-	client := sdk.NewClient(cfg.BaseURL, apiKey, cfg.AccountID)
+	client := sdk.NewClient(baseURL, apiKey, 0)
 	profile, err := client.Profile().Get()
 	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+		return errLoginProfile
 	}
+	displayProfile := safeProfileForDisplay(profile, apiKey)
 
-	// The token is valid, but that doesn't mean it can access the account ID the
-	// user typed. Verify membership now so a typo/wrong account fails here with a
-	// clear message instead of as a cryptic 404 on the first account-scoped call.
-	if err := verifyAccountAccess(profile, cfg.AccountID); err != nil {
+	accountID, err := selectAccount(bufferedReader, displayProfile.Accounts, profile.AccountID, writer)
+	if err != nil {
 		return err
 	}
-	cfg.UserID = profile.ID
+	if err := verifyAccountAccess(profile, accountID); err != nil {
+		return err
+	}
+	cfg := &config.Config{BaseURL: baseURL, AccountID: accountID, UserID: profile.ID}
 
-	if err := config.SaveAPIKey(cfg, apiKey); err != nil {
+	if err := persistLogin(cfg, apiKey); err != nil {
+		if errors.Is(err, lock.ErrLocked) {
+			return err
+		}
+		return fmt.Errorf("%s", redactAuthError(err.Error(), apiKey))
+	}
+
+	fmt.Fprint(writer, loginSuccessMessage(displayProfile.Name, displayProfile.Email))
+	fmt.Fprintf(writer, "Workspace: %s\n", selectedAccount(displayProfile.Accounts, accountID))
+	return nil
+}
+
+func persistLogin(cfg *config.Config, apiKey string) error {
+	authLock, err := lock.AcquireAuth()
+	if err != nil {
+		return fmt.Errorf("failed to persist Wavo login: %w", err)
+	}
+	defer authLock.Release()
+
+	rollbackCredential, err := config.SaveAPIKeyWithRollback(cfg, apiKey)
+	if err != nil {
 		return err
 	}
 
 	if err := config.Save(cfg); err != nil {
-		_ = config.DeleteAPIKey(cfg)
+		if rollbackErr := rollbackCredential(); rollbackErr != nil {
+			return fmt.Errorf("failed to save config: %w (also failed to restore the previous Wavo credential: %v)", err, rollbackErr)
+		}
 		return fmt.Errorf("failed to save config: %w", err)
 	}
-
-	fmt.Print(loginSuccessMessage(profile.Name, profile.Email))
 	return nil
+}
+
+func normalizeLoginBaseURL(input string, allowHTTP bool) (string, error) {
+	raw := strings.TrimSpace(input)
+	if raw == "" {
+		raw = brand.DefaultBaseURL
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") ||
+		u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(raw, "#") || u.User != nil {
+		return "", fmt.Errorf("base URL must contain only scheme and host")
+	}
+	if u.Scheme != "https" && !(allowHTTP && u.Scheme == "http") {
+		return "", fmt.Errorf("base URL must use HTTPS")
+	}
+	return strings.TrimRight(u.String(), "/"), nil
+}
+
+type profileDisplayAccount struct {
+	ID   int
+	Name string
+	Role string
+}
+
+type profileDisplay struct {
+	Name               string
+	Email              string
+	Role               string
+	AvailabilityStatus string
+	Accounts           []profileDisplayAccount
+}
+
+func selectAccount(reader io.Reader, accounts []profileDisplayAccount, fallbackID int, writer io.Writer) (int, error) {
+	switch len(accounts) {
+	case 0:
+		if fallbackID > 0 {
+			return fallbackID, nil
+		}
+		return 0, fmt.Errorf("authenticated Wavo profile has no accessible workspace")
+	case 1:
+		return accounts[0].ID, nil
+	}
+	for i, account := range accounts {
+		fmt.Fprintf(writer, "%d. %s (%d, %s)\n", i+1, output.SanitizeText(account.Name), account.ID, output.SanitizeText(account.Role))
+	}
+	fmt.Fprint(writer, "Workspace: ")
+	line, err := bufio.NewReader(reader).ReadString('\n')
+	if err != nil && line == "" {
+		return 0, fmt.Errorf("failed to read workspace selection: %w", err)
+	}
+	selection, err := strconv.Atoi(strings.TrimSpace(line))
+	if err != nil || selection < 1 || selection > len(accounts) {
+		return 0, fmt.Errorf("workspace selection must be a number from 1 to %d", len(accounts))
+	}
+	return accounts[selection-1].ID, nil
+}
+
+func selectedAccount(accounts []profileDisplayAccount, id int) string {
+	for _, account := range accounts {
+		if account.ID == id {
+			name := output.SanitizeText(account.Name)
+			if name == "" {
+				return strconv.Itoa(id)
+			}
+			return fmt.Sprintf("%d (%s)", id, name)
+		}
+	}
+	return strconv.Itoa(id)
+}
+
+func safeProfileForDisplay(profile *sdk.ProfileResponse, token string) *profileDisplay {
+	if profile == nil {
+		return nil
+	}
+	safe := &profileDisplay{
+		Name:               safeProfileText(profile.Name, token),
+		Email:              safeProfileText(profile.Email, token),
+		Role:               safeProfileText(profile.Role, token),
+		AvailabilityStatus: safeProfileText(profile.AvailabilityStatus, token),
+		Accounts:           make([]profileDisplayAccount, len(profile.Accounts)),
+	}
+	for i, account := range profile.Accounts {
+		safe.Accounts[i] = profileDisplayAccount{
+			ID:   account.ID,
+			Name: safeProfileText(account.Name, token),
+			Role: safeProfileText(account.Role, token),
+		}
+	}
+	return safe
+}
+
+func safeProfileText(value, token string) string {
+	if token != "" {
+		value = strings.ReplaceAll(value, token, "[REDACTED]")
+		if strings.ContainsAny(value, "%+") {
+			return "[REDACTED]"
+		}
+	}
+	return output.SanitizeText(value)
+}
+
+func redactAuthError(message, token string) string {
+	return safeProfileText(message, token)
 }
 
 func loginSuccessMessage(name, email string) string {
 	return fmt.Sprintf("Logged in as %s (%s)\n", output.SanitizeText(name), output.SanitizeText(email))
 }
 
-// verifyAccountAccess fails login when the entered account ID is not one the
-// authenticated user belongs to. The profile payload's accounts array is the
-// source of truth. If the instance returns no accounts (older Chatwoot, or a
-// token type that omits them), the check is skipped rather than block login.
+// verifyAccountAccess rejects a selected workspace unless the authenticated
+// profile lists it, or its fallback account_id matches for older instances.
 func verifyAccountAccess(profile *sdk.ProfileResponse, accountID int) error {
+	if accountID <= 0 {
+		return fmt.Errorf("authenticated Wavo profile returned an invalid workspace ID")
+	}
 	if len(profile.Accounts) == 0 {
-		return nil
+		if profile.AccountID == accountID {
+			return nil
+		}
+		return fmt.Errorf("workspace %d is not available in the authenticated Wavo profile", accountID)
 	}
 	for _, acc := range profile.Accounts {
 		if acc.ID == accountID {
 			return nil
 		}
 	}
-	return fmt.Errorf("account %d is not accessible with this API key; %s", accountID, accessibleAccountsHint(profile.Accounts))
+	return fmt.Errorf("workspace %d is not accessible with this API key; %s", accountID, accessibleAccountsHint(profile.Accounts))
 }
 
 func accessibleAccountsHint(accounts []sdk.ProfileAccount) string {
@@ -143,17 +278,18 @@ func readAPIKey(reader *bufio.Reader) (string, error) {
 type AuthLogoutCmd struct{}
 
 func (c *AuthLogoutCmd) Run(app *App) error {
-	cfg, err := config.Load()
+	authLock, err := lock.AcquireAuth()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to update Wavo authentication: %w", err)
 	}
+	defer authLock.Release()
 
 	path, err := config.ConfigPath()
 	if err != nil {
 		return err
 	}
 
-	if err := config.DeleteAPIKey(cfg); err != nil {
+	if err := config.DeleteAPIKey(nil); err != nil {
 		return err
 	}
 
@@ -165,7 +301,7 @@ func (c *AuthLogoutCmd) Run(app *App) error {
 			}
 			return nil
 		}
-		return fmt.Errorf("failed to remove config: %w", err)
+		return fmt.Errorf("Wavo credentials were removed, but the config file could not be removed: %w", err)
 	}
 
 	fmt.Println("Logged out successfully.")
@@ -189,7 +325,7 @@ func runAuthStatus(app *App) error {
 	}
 
 	if cfg == nil || !cfg.IsValid() {
-		_, err := fmt.Fprintln(app.Printer.Writer, "Not logged in. Run 'chatwoot auth login' to authenticate.")
+		_, err := fmt.Fprintln(app.Printer.Writer, "Not logged in. Run 'wavo auth login' to authenticate.")
 		return err
 	}
 
@@ -201,26 +337,37 @@ func runAuthStatus(app *App) error {
 	client := sdk.NewClient(cfg.BaseURL, apiKey, cfg.AccountID)
 	profile, err := client.Profile().Get()
 	if err != nil {
-		return fmt.Errorf("failed to fetch profile: %w", err)
+		return errStatusProfile
 	}
+	displayProfile := safeProfileForDisplay(profile, apiKey)
 
 	// Self-heal the cached UserID for older saved logins. Environment tokens are
 	// temporary overrides and must not rewrite the persisted login identity.
 	if source == config.CredentialSourceKeyring && cfg.UserID != profile.ID {
-		cfg.UserID = profile.ID
-		_ = config.Save(cfg)
+		if err := refreshCachedUserID(cfg, profile.ID); err != nil {
+			return fmt.Errorf("failed to update Wavo authentication status: %w", err)
+		}
 	}
 
 	app.Printer.PrintDetail([]output.KeyValue{
 		{Key: "Instance", Value: cfg.BaseURL},
 		{Key: "Account", Value: strconv.Itoa(cfg.AccountID)},
+		{Key: "Workspace", Value: selectedAccount(displayProfile.Accounts, cfg.AccountID)},
 		{Key: "User ID", Value: strconv.Itoa(profile.ID)},
-		{Key: "Name", Value: profile.Name},
-		{Key: "Email", Value: profile.Email},
-		{Key: "Role", Value: profile.Role},
-		{Key: "Availability", Value: profile.AvailabilityStatus},
+		{Key: "Name", Value: displayProfile.Name},
+		{Key: "Email", Value: displayProfile.Email},
+		{Key: "Role", Value: displayProfile.Role},
+		{Key: "Availability", Value: displayProfile.AvailabilityStatus},
 		{Key: "Credential", Value: string(source)},
 	})
 
 	return nil
+}
+
+func refreshCachedUserID(snapshot *config.Config, profileID int) error {
+	_, err := updateConfigForAuth(snapshot, func(current *config.Config) error {
+		current.UserID = profileID
+		return nil
+	})
+	return err
 }

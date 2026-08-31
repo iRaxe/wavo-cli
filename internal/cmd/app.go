@@ -10,10 +10,11 @@ import (
 
 // App holds shared state passed to every command's Run method.
 type App struct {
-	Client  *sdk.Client
-	Printer *output.Printer
-	Config  *config.Config
-	Version string
+	Client           *sdk.Client
+	Printer          *output.Printer
+	Config           *config.Config
+	CredentialSource config.CredentialSource
+	Version          string
 }
 
 // NewApp creates an App from the parsed CLI flags.
@@ -22,7 +23,7 @@ func NewApp(cli *CLI, skipAuth bool, version string) (*App, error) {
 	printer := output.NewPrinter(cli.Output, cli.NoColor, cli.Quiet)
 
 	if skipAuth {
-		return &App{Printer: printer, Version: version}, nil
+		return &App{Printer: printer, CredentialSource: config.CredentialSourceMissing, Version: version}, nil
 	}
 
 	cfg, err := config.Load()
@@ -39,7 +40,7 @@ func NewApp(cli *CLI, skipAuth bool, version string) (*App, error) {
 		effectiveCfg.AccountID = cli.Account
 	}
 
-	apiKey, _, err := config.ResolveAPIKey(&effectiveCfg)
+	apiKey, credentialSource, err := config.ResolveAPIKey(&effectiveCfg)
 	if err != nil {
 		return nil, fmt.Errorf("not authenticated: %w", err)
 	}
@@ -52,9 +53,10 @@ func NewApp(cli *CLI, skipAuth bool, version string) (*App, error) {
 	)
 
 	return &App{
-		Client:  client,
-		Printer: printer,
-		Config:  cfg,
-		Version: version,
+		Client:           client,
+		Printer:          printer,
+		Config:           cfg,
+		CredentialSource: credentialSource,
+		Version:          version,
 	}, nil
 }

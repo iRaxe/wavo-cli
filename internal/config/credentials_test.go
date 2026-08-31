@@ -78,6 +78,67 @@ func TestResolveAPIKeyFromKeyring(t *testing.T) {
 	}
 }
 
+func TestSaveAPIKeyWithRollbackRestoresPreviousCredential(t *testing.T) {
+	initMockKeyring(t)
+	oldConfig := &Config{BaseURL: brand.DefaultBaseURL, AccountID: 7}
+	newConfig := &Config{BaseURL: "https://other.wavo.example", AccountID: 9}
+	if err := SaveAPIKey(oldConfig, "old-token"); err != nil {
+		t.Fatalf("SaveAPIKey(old) error = %v", err)
+	}
+	previous, err := keyring.Get(keyringService, apiKeyKeyringEntry)
+	if err != nil {
+		t.Fatalf("keyring.Get(previous) error = %v", err)
+	}
+	if err := keyring.Set(keyringService, "unrelated-entry", "keep-me"); err != nil {
+		t.Fatalf("keyring.Set(unrelated) error = %v", err)
+	}
+
+	rollback, err := SaveAPIKeyWithRollback(newConfig, "new-token")
+	if err != nil {
+		t.Fatalf("SaveAPIKeyWithRollback() error = %v", err)
+	}
+	if got, _, err := ResolveAPIKey(newConfig); err != nil || got != "new-token" {
+		t.Fatalf("new credential not saved: got=%q err=%v", got, err)
+	}
+	if err := rollback(); err != nil {
+		t.Fatalf("rollback() error = %v", err)
+	}
+
+	restored, err := keyring.Get(keyringService, apiKeyKeyringEntry)
+	if err != nil || restored != previous {
+		t.Fatalf("rollback restored %q, %v; want exact previous entry %q", restored, err, previous)
+	}
+	if got, _, err := ResolveAPIKey(oldConfig); err != nil || got != "old-token" {
+		t.Fatalf("old credential not usable after rollback: got=%q err=%v", got, err)
+	}
+	if got, err := keyring.Get(keyringService, "unrelated-entry"); err != nil || got != "keep-me" {
+		t.Fatalf("rollback changed unrelated entry: got=%q err=%v", got, err)
+	}
+}
+
+func TestSaveAPIKeyWithRollbackDeletesOnlyNewCredential(t *testing.T) {
+	initMockKeyring(t)
+	cfg := &Config{BaseURL: brand.DefaultBaseURL, AccountID: 7}
+	if err := keyring.Set(keyringService, "unrelated-entry", "keep-me"); err != nil {
+		t.Fatalf("keyring.Set(unrelated) error = %v", err)
+	}
+
+	rollback, err := SaveAPIKeyWithRollback(cfg, "new-token")
+	if err != nil {
+		t.Fatalf("SaveAPIKeyWithRollback() error = %v", err)
+	}
+	if err := rollback(); err != nil {
+		t.Fatalf("rollback() error = %v", err)
+	}
+
+	if _, err := keyring.Get(keyringService, apiKeyKeyringEntry); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("new credential remains after rollback: %v", err)
+	}
+	if got, err := keyring.Get(keyringService, "unrelated-entry"); err != nil || got != "keep-me" {
+		t.Fatalf("rollback changed unrelated entry: got=%q err=%v", got, err)
+	}
+}
+
 func TestResolveAPIKeyRejectsMismatchedStableCredential(t *testing.T) {
 	initMockKeyring(t)
 	cfg := &Config{BaseURL: "https://app.chatwoot.com", AccountID: 124}

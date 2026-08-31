@@ -3,12 +3,15 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/iRaxe/wavo-cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/lock"
 	"github.com/iRaxe/wavo-cli/internal/output"
 )
 
@@ -141,6 +144,95 @@ func TestHCDefaultShowsAndClearsDefault(t *testing.T) {
 	}
 	if loaded.HelpCenter.DefaultPortalSlug != "" || loaded.HelpCenter.DefaultLocale != "" {
 		t.Fatalf("help center default was not cleared: %#v", loaded.HelpCenter)
+	}
+}
+
+func TestHCDefaultDoesNotMutateLoginWhileAuthLockHeld(t *testing.T) {
+	setupTestEnv(t)
+	t.Setenv(config.APIKeyEnv, "")
+	old := &config.Config{
+		BaseURL:   brand.DefaultBaseURL,
+		AccountID: 7,
+		UserID:    11,
+		HelpCenter: config.HelpCenterConfig{
+			DefaultPortalSlug: "old-portal",
+			DefaultLocale:     "en",
+		},
+	}
+	if err := config.Save(old); err != nil {
+		t.Fatalf("save old config: %v", err)
+	}
+	if err := config.SaveAPIKey(old, "old-token"); err != nil {
+		t.Fatalf("save old credential: %v", err)
+	}
+	held, err := lock.AcquireAuth()
+	if err != nil {
+		t.Fatalf("AcquireAuth: %v", err)
+	}
+	defer held.Release()
+
+	app := &App{Config: old, Printer: testPrinter(&bytes.Buffer{})}
+	err = (&HCDefaultCmd{Clear: true}).Run(app)
+	if !errors.Is(err, lock.ErrLocked) {
+		t.Fatalf("clear error = %v, want ErrLocked", err)
+	}
+	loaded, err := config.Load()
+	if err != nil || loaded == nil || *loaded != *old {
+		t.Fatalf("clear changed config while locked: cfg=%#v err=%v", loaded, err)
+	}
+	if got, _, err := config.ResolveAPIKey(loaded); err != nil || got != "old-token" {
+		t.Fatalf("clear changed credential while locked: got=%q err=%v", got, err)
+	}
+}
+
+func TestHCDefaultDoesNotOverwriteNewerLogin(t *testing.T) {
+	setupTestEnv(t)
+	t.Setenv(config.APIKeyEnv, "")
+	old := &config.Config{
+		BaseURL:   brand.DefaultBaseURL + "/",
+		AccountID: 7,
+		HelpCenter: config.HelpCenterConfig{
+			DefaultPortalSlug: "old-portal",
+			DefaultLocale:     "en",
+		},
+	}
+	if err := config.Save(old); err != nil {
+		t.Fatalf("save old config: %v", err)
+	}
+	if err := config.SaveAPIKey(old, "old-token"); err != nil {
+		t.Fatalf("save old credential: %v", err)
+	}
+	app := &App{Config: old, Printer: testPrinter(&bytes.Buffer{})}
+
+	newer := &config.Config{
+		BaseURL:   brand.DefaultBaseURL,
+		AccountID: 7,
+		UserID:    77,
+		HelpCenter: config.HelpCenterConfig{
+			DefaultPortalSlug: "new-portal",
+			DefaultLocale:     "it",
+		},
+	}
+	if err := config.SaveAPIKey(newer, "new-token"); err != nil {
+		t.Fatalf("save newer credential: %v", err)
+	}
+	if err := config.Save(newer); err != nil {
+		t.Fatalf("save newer config: %v", err)
+	}
+
+	err := (&HCDefaultCmd{Clear: true}).Run(app)
+	if err == nil || !strings.Contains(err.Error(), "Wavo") || !strings.Contains(strings.ToLower(err.Error()), "retry") {
+		t.Fatalf("clear error = %v, want actionable stale-auth error", err)
+	}
+	loaded, err := config.Load()
+	if err != nil || loaded == nil || *loaded != *newer {
+		t.Fatalf("stale clear overwrote newer config: cfg=%#v err=%v", loaded, err)
+	}
+	if got, _, err := config.ResolveAPIKey(loaded); err != nil || got != "new-token" {
+		t.Fatalf("newer keyring/config do not correspond: got=%q err=%v", got, err)
+	}
+	if app.Config != old {
+		t.Fatalf("stale command replaced app config on failure: %#v", app.Config)
 	}
 }
 

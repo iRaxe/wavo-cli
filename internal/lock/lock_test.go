@@ -2,9 +2,43 @@ package lock
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/iRaxe/wavo-cli/internal/brand"
+	"github.com/iRaxe/wavo-cli/internal/config"
 )
+
+func TestAcquireAuthConflictAndRelease(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	first, err := AcquireAuth()
+	if err != nil {
+		t.Fatalf("first AcquireAuth: %v", err)
+	}
+	if _, err := AcquireAuth(); !errors.Is(err, ErrLocked) || !strings.Contains(err.Error(), "Wavo") {
+		t.Fatalf("second AcquireAuth error = %v, want Wavo-branded ErrLocked", err)
+	}
+
+	name := "auth.lock"
+	if config.IsDev {
+		name = "auth-dev.lock"
+	}
+	path := filepath.Join(home, brand.ConfigDirName, "locks", name)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("auth lock file %q missing: %v", path, err)
+	}
+
+	first.Release()
+	second, err := AcquireAuth()
+	if err != nil {
+		t.Fatalf("AcquireAuth after release: %v", err)
+	}
+	second.Release()
+}
 
 func TestAcquireConflictAndRelease(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "locks")

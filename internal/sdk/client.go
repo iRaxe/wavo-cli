@@ -2,15 +2,34 @@ package sdk
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/iRaxe/wavo-cli/internal/output"
+)
+
+var (
+	errRedirectRefused     = errors.New("redirect refused")
+	errAPIRequestFailed    = errors.New("Wavo API request failed")
+	errAPIResponseRead     = errors.New("failed to read Wavo API response")
+	errAPIResponseDecode   = errors.New("failed to decode Wavo API response")
+	errAPIResponseTooLarge = errors.New("Wavo API response too large")
+)
+
+const (
+	// Verbose decoded responses must be buffered so they can be logged and then
+	// decoded. Cap that diagnostic buffer to avoid unbounded memory use.
+	maxVerboseDecodedResponseBytes int64 = 8 << 20
+	// API error bodies are diagnostics rather than machine responses, so retain
+	// at most 1 MiB before omitting an oversized body from the returned error.
+	maxAPIErrorDiagnosticBytes int64 = 1 << 20
 )
 
 type Client struct {
@@ -27,6 +46,15 @@ type RawResponse struct {
 	Header     http.Header
 	Body       []byte
 }
+
+type credentialSafeError struct {
+	kind    error
+	message string
+}
+
+func (e *credentialSafeError) Error() string { return e.message }
+
+func (e *credentialSafeError) Is(target error) bool { return target == e.kind }
 
 type ClientOption func(*Client)
 
@@ -48,7 +76,8 @@ func NewClient(baseURL, apiKey string, accountID int, opts ...ClientOption) *Cli
 		APIKey:    apiKey,
 		AccountID: accountID,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout:       30 * time.Second,
+			CheckRedirect: checkSameOriginRedirect,
 		},
 	}
 
@@ -59,6 +88,36 @@ func NewClient(baseURL, apiKey string, accountID int, opts ...ClientOption) *Cli
 	return c
 }
 
+func checkSameOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errRedirectRefused
+	}
+	if len(via) == 0 || sameOrigin(via[0].URL, req.URL) {
+		return nil
+	}
+	return errRedirectRefused
+}
+
+func sameOrigin(left, right *url.URL) bool {
+	return strings.EqualFold(left.Scheme, right.Scheme) &&
+		strings.EqualFold(left.Hostname(), right.Hostname()) &&
+		effectivePort(left) == effectivePort(right)
+}
+
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return "80"
+	case "https":
+		return "443"
+	default:
+		return ""
+	}
+}
+
 func (c *Client) apiPath(path string) string {
 	return fmt.Sprintf("%s/api/v1/accounts/%d%s", c.BaseURL, c.AccountID, path)
 }
@@ -66,7 +125,7 @@ func (c *Client) apiPath(path string) string {
 func (c *Client) request(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, c.apiPath(path), body)
 	if err != nil {
-		return nil, err
+		return nil, c.safeError(errAPIRequestFailed)
 	}
 
 	req.Header.Set("api_access_token", c.APIKey)
@@ -78,7 +137,7 @@ func (c *Client) request(method, path string, body io.Reader) (*http.Request, er
 func (c *Client) rawRequest(method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequest(method, fmt.Sprintf("%s%s", c.BaseURL, path), body)
 	if err != nil {
-		return nil, err
+		return nil, c.safeError(errAPIRequestFailed)
 	}
 
 	req.Header.Set("api_access_token", c.APIKey)
@@ -89,22 +148,24 @@ func (c *Client) rawRequest(method, path string, body io.Reader) (*http.Request,
 
 func (c *Client) do(req *http.Request, v interface{}) error {
 	if c.Verbose {
-		fmt.Fprintf(os.Stderr, "> %s %s\n", req.Method, req.URL.String())
+		c.verbosef("> %s %s", req.Method, req.URL.String())
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		if errors.Is(err, errRedirectRefused) {
+			return c.safeError(errRedirectRefused)
+		}
+		return c.safeError(errAPIRequestFailed)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if c.Verbose {
-		fmt.Fprintf(os.Stderr, "< %s\n", resp.Status)
+		c.verbosef("< %s", resp.Status)
 	}
 
 	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("API error %d: %s", resp.StatusCode, output.SanitizeText(string(body)))
+		return c.apiError(resp)
 	}
 
 	if v == nil {
@@ -112,46 +173,58 @@ func (c *Client) do(req *http.Request, v interface{}) error {
 	}
 
 	if c.Verbose {
-		body, err := io.ReadAll(resp.Body)
+		body, tooLarge, err := readBodyLimited(resp.Body, maxVerboseDecodedResponseBytes)
 		if err != nil {
-			return fmt.Errorf("failed to read response: %w", err)
+			return c.safeError(errAPIResponseRead)
 		}
-		fmt.Fprintf(os.Stderr, "< %s\n", redactSensitiveJSON(body))
+		if tooLarge {
+			return c.safeError(errAPIResponseTooLarge)
+		}
+		c.verbosef("< %s", redactSensitiveJSON(body, c.APIKey))
 		if err := json.Unmarshal(body, v); err != nil {
-			return fmt.Errorf("failed to decode response: %w", err)
+			return c.safeError(errAPIResponseDecode)
 		}
 		return nil
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(v); err != nil {
+		return c.safeError(errAPIResponseDecode)
 	}
-
+	var trailing interface{}
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return c.safeError(errAPIResponseDecode)
+	}
 	return nil
 }
 
 func (c *Client) doRaw(req *http.Request) (*RawResponse, error) {
 	if c.Verbose {
-		fmt.Fprintf(os.Stderr, "> %s %s\n", req.Method, req.URL.String())
+		c.verbosef("> %s %s", req.Method, req.URL.String())
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		if errors.Is(err, errRedirectRefused) {
+			return nil, c.safeError(errRedirectRefused)
+		}
+		return nil, c.safeError(errAPIRequestFailed)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if c.Verbose {
-		fmt.Fprintf(os.Stderr, "< %s\n", resp.Status)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		c.verbosef("< %s", resp.Status)
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, output.SanitizeText(string(body)))
+		return nil, c.apiError(resp)
+	}
+
+	// Raw successful responses intentionally retain their existing unbounded
+	// contract. Callers explicitly request the complete response bytes.
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, c.safeError(errAPIResponseRead)
 	}
 
 	return &RawResponse{
@@ -162,36 +235,112 @@ func (c *Client) doRaw(req *http.Request) (*RawResponse, error) {
 	}, nil
 }
 
-func redactSensitiveJSON(body []byte) string {
+func (c *Client) apiError(resp *http.Response) error {
+	body, tooLarge, err := readBodyLimited(resp.Body, maxAPIErrorDiagnosticBytes)
+	if err != nil {
+		return c.safeError(errAPIResponseRead)
+	}
+	if tooLarge {
+		return c.messageError(fmt.Sprintf("API error %d: response body omitted because it exceeds the diagnostic limit", resp.StatusCode))
+	}
+	return c.messageError(fmt.Sprintf("API error %d: %s", resp.StatusCode, redactSensitiveJSON(body, c.APIKey)))
+}
+
+func readBodyLimited(reader io.Reader, limit int64) ([]byte, bool, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		return nil, false, err
+	}
+	if int64(len(body)) > limit {
+		return nil, true, nil
+	}
+	return body, false, nil
+}
+
+func redactSensitiveJSON(body []byte, apiKey string) string {
 	var value interface{}
 	if err := json.Unmarshal(body, &value); err != nil {
-		return output.SanitizeText(string(body))
+		return renderCredentialDiagnostic(string(body), apiKey)
 	}
 
-	redactSensitiveFields(value)
+	value = redactSensitiveFields(value, apiKey)
 
 	redacted, err := json.Marshal(value)
 	if err != nil {
-		return output.SanitizeText(string(body))
+		return renderCredentialDiagnostic(string(body), apiKey)
 	}
-	return string(redacted)
+	return renderCredentialDiagnostic(string(redacted), apiKey)
 }
 
-func redactSensitiveFields(value interface{}) {
+func redactSensitiveFields(value interface{}, apiKey string) interface{} {
 	switch typed := value.(type) {
 	case map[string]interface{}:
-		for key, child := range typed {
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		redacted := make(map[string]interface{}, len(typed))
+		for _, key := range keys {
+			child := typed[key]
+			redactedKey := renderCredentialDiagnostic(key, apiKey)
 			if isSensitiveField(key) {
-				typed[key] = "[REDACTED]"
+				redacted[redactedKey] = credentialRedactionMarker(apiKey)
 				continue
 			}
-			redactSensitiveFields(child)
+			// Redacted keys may collide. Sorting makes the lexicographically
+			// last original key win deterministically without exposing either key.
+			redacted[redactedKey] = redactSensitiveFields(child, apiKey)
 		}
+		return redacted
 	case []interface{}:
-		for _, child := range typed {
-			redactSensitiveFields(child)
+		for i, child := range typed {
+			typed[i] = redactSensitiveFields(child, apiKey)
+		}
+	case string:
+		return renderCredentialDiagnostic(typed, apiKey)
+	}
+	return value
+}
+
+func renderCredentialDiagnostic(value, apiKey string) string {
+	if apiKey == "" {
+		return output.SanitizeText(value)
+	}
+	candidates := []string{apiKey, url.QueryEscape(apiKey), url.PathEscape(apiKey)}
+	marker := credentialRedactionMarker(apiKey)
+	for _, candidate := range candidates {
+		if candidate != "" {
+			value = strings.ReplaceAll(value, candidate, marker)
 		}
 	}
+	if strings.ContainsAny(value, "%+") {
+		return marker
+	}
+	return output.SanitizeText(value)
+}
+
+func (c *Client) verbosef(format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	fmt.Fprintln(os.Stderr, renderCredentialDiagnostic(message, c.APIKey))
+}
+
+func (c *Client) safeError(kind error) error {
+	return &credentialSafeError{kind: kind, message: renderCredentialDiagnostic(kind.Error(), c.APIKey)}
+}
+
+func (c *Client) messageError(message string) error {
+	return errors.New(renderCredentialDiagnostic(message, c.APIKey))
+}
+
+func credentialRedactionMarker(apiKey string) string {
+	const marker = "[REDACTED]"
+	for _, candidate := range []string{apiKey, url.QueryEscape(apiKey), url.PathEscape(apiKey)} {
+		if candidate != "" && strings.Contains(marker, candidate) {
+			return ""
+		}
+	}
+	return marker
 }
 
 func isSensitiveField(key string) bool {

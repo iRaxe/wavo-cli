@@ -157,7 +157,7 @@ func TestAssignMeAccountOverrideSmoke(t *testing.T) {
 	if post.AccountID != 1 {
 		t.Fatalf("persisted account_id = %d, want original account 1", post.AccountID)
 	}
-	if post.UserID != 77 {
-		t.Fatalf("persisted user_id = %d, want fetched profile user 77", post.UserID)
+	if post.UserID != 0 {
+		t.Fatalf("persisted user_id = %d, want unchanged user 0 for environment credential", post.UserID)
 	}
 }
