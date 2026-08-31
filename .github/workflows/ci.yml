@@ -13,10 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
@@ -28,6 +32,9 @@ jobs:
           ./scripts/check-docs.sh
           ./scripts/check-docs-test.sh
           ./scripts/update-swagger-test.sh
+          ./scripts/sync-upstream-test.sh
+          ./scripts/check-workflow.sh
+          ./scripts/check-workflow-test.sh
           mkdir -p ./bin
           go build -trimpath -o ./bin/wavo ./cmd/wavo
           ./scripts/check-branding.sh ./bin/wavo
@@ -40,10 +47,14 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
@@ -63,7 +74,8 @@ jobs:
 
       - name: Upload coverage profile
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v7
+        # actions/upload-artifact v7, pinned from the official v7 tag.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: coverage-profile
           path: cover.out
@@ -85,10 +97,14 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Coverage report
-        uses: fgrosse/go-coverage-report@v1.3.1
+        # fgrosse/go-coverage-report v1.3.1, pinned to the peeled release commit.
+        uses: fgrosse/go-coverage-report@e432de98ee94a276e8f666d25bfd76347665f75b
         with:
           coverage-artifact-name: coverage-profile
           coverage-file-name: cover.out
@@ -98,16 +114,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
       - name: Run govulncheck
         run: govulncheck ./...
@@ -117,10 +137,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@v5
+        # actions/dependency-review-action v5.0.0, pinned from the official tag.
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
@@ -129,30 +153,83 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
 
       - name: golangci-lint
         # v9 defaults to golangci-lint v2.x, which supports recent Go (1.25+).
-        uses: golangci/golangci-lint-action@v9
+        # golangci/golangci-lint-action v9, pinned to the peeled release commit.
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
         with:
-          version: latest
+          version: v2.13.2
           args: --timeout=5m
 
   shellcheck:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - name: Run shellcheck on shell scripts
-        uses: ludeeus/action-shellcheck@master
+        # ludeeus/action-shellcheck, pinned from the reviewed master commit.
+        uses: ludeeus/action-shellcheck@00b27aa7cb85167568cb48a3838b75f4265f2bca
         with:
           scandir: "."
           ignore_paths: ".git"
           check_together: true
+
+  dev-profile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test development profile
+        run: go test -tags dev -count=1 ./internal/config ./internal/cmd
+
+  release-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release snapshot
+        # goreleaser/goreleaser-action v7, pinned from the official v7 tag.
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94
+        with:
+          distribution: goreleaser
+          version: "2.15.4"
+          args: release --snapshot --clean --skip=publish
