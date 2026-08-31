@@ -282,7 +282,7 @@ expect_unchanged "caller workspace preserves destination"
 
 poison_goenv="$temporary_dir/poison goenv"
 printf '%s\n' 'GOFLAGS=-trimpath' >"$poison_goenv"
-trusted_goroot=$(env -i PATH="$safe_system_path" LC_ALL=C GOENV=off "$safe_go_executable" env GOROOT)
+trusted_goroot=$(safe_go "$poison_context" -C "$temporary_dir" env GOROOT)
 poison_goroot="$temporary_dir/poison goroot"
 ln -s "$trusted_goroot" "$poison_goroot"
 expect_failure "caller Go environment cannot influence validation" 2 "Wavo Swagger contract validation failed" \
