@@ -7,7 +7,7 @@
 # Environment:
 #   WAVO_VERSION      pin a specific version, e.g. "v0.2.1" (default: latest)
 #   WAVO_INSTALL_DIR  install location (default: $HOME/.local/bin)
-#   NO_COLOR              set to disable color/banner output
+#   NO_COLOR          set to disable color/banner output
 
 set -eu
 
@@ -15,6 +15,94 @@ REPO="iRaxe/wavo-cli"
 BINARY="wavo"
 INSTALL_DIR="${WAVO_INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${WAVO_VERSION:-latest}"
+requested_latest=false
+[ "$VERSION" = "latest" ] && requested_latest=true
+
+valid_release_tag() {
+  printf '%s\n' "$1" | LC_ALL=C awk '
+    NR != 1 { valid=0 }
+    NR == 1 {
+      valid=1
+      if ($0 !~ /^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/) valid=0
+      value=substr($0, 2)
+      plus=index(value, "+")
+      core_and_pre=value
+      if (plus) {
+        core_and_pre=substr(value, 1, plus-1)
+        if (!identifiers(substr(value, plus+1), 0)) valid=0
+      }
+      dash=index(core_and_pre, "-")
+      core_value=core_and_pre
+      if (dash) {
+        core_value=substr(core_and_pre, 1, dash-1)
+        if (!identifiers(substr(core_and_pre, dash+1), 1)) valid=0
+      }
+      core_count=split(core_value, core, ".")
+      if (core_count != 3) valid=0
+      for (i=1; i<=3; i++) {
+        if (core[i] !~ /^(0|[1-9][0-9]*)$/) valid=0
+      }
+    }
+    function identifiers(value, reject_leading_zero, parts, count, i) {
+      count=split(value, parts, ".")
+      for (i=1; i<=count; i++) {
+        if (parts[i] == "" || parts[i] !~ /^[0-9A-Za-z-]+$/) return 0
+        if (reject_leading_zero && parts[i] ~ /^[0-9]+$/ && parts[i] ~ /^0[0-9]+$/) return 0
+      }
+      return 1
+    }
+    END { exit valid ? 0 : 1 }
+  '
+}
+
+release_is_newer_or_equal() {
+  printf '%s\n%s\n' "$1" "$2" | LC_ALL=C awk '
+    NR == 1 { candidate=$0 }
+    NR == 2 { installed=$0 }
+    END {
+      candidate_pre_count=split_version(candidate, candidate_core, candidate_pre)
+      installed_pre_count=split_version(installed, installed_core, installed_pre)
+      for (i=1; i<=3; i++) {
+        comparison=compare_numeric(candidate_core[i], installed_core[i])
+        if (comparison != 0) exit comparison > 0 ? 0 : 1
+      }
+      candidate_has_pre=(candidate_pre[1] != "")
+      installed_has_pre=(installed_pre[1] != "")
+      if (!candidate_has_pre && installed_has_pre) exit 0
+      if (candidate_has_pre && !installed_has_pre) exit 1
+      count=(candidate_pre_count > installed_pre_count ? candidate_pre_count : installed_pre_count)
+      for (i=1; i<=count; i++) {
+        if (!(i in candidate_pre)) exit 1
+        if (!(i in installed_pre)) exit 0
+        candidate_numeric=(candidate_pre[i] ~ /^[0-9]+$/)
+        installed_numeric=(installed_pre[i] ~ /^[0-9]+$/)
+        if (candidate_numeric && installed_numeric) comparison=compare_numeric(candidate_pre[i], installed_pre[i])
+        else if (candidate_numeric) comparison=-1
+        else if (installed_numeric) comparison=1
+        else comparison=(candidate_pre[i] == installed_pre[i] ? 0 : (candidate_pre[i] > installed_pre[i] ? 1 : -1))
+        if (comparison != 0) exit comparison > 0 ? 0 : 1
+      }
+      exit 0
+    }
+    function split_version(value, core, prerelease, without_build, dash, pre, pre_count) {
+      value=substr(value, 2)
+      sub(/\+.*/, "", value)
+      dash=index(value, "-")
+      without_build=value
+      if (dash) {
+        without_build=substr(value, 1, dash-1)
+        pre=substr(value, dash+1)
+        pre_count=split(pre, prerelease, ".")
+      }
+      split(without_build, core, ".")
+      return pre_count
+    }
+    function compare_numeric(left, right) {
+      if (length(left) != length(right)) return length(left) > length(right) ? 1 : -1
+      return left == right ? 0 : (left > right ? 1 : -1)
+    }
+  '
+}
 
 # ---------------------------------------------------------------------------
 # Pretty output
@@ -71,43 +159,51 @@ step "Detected ${os}/${arch}"
 # Detect existing install
 # ---------------------------------------------------------------------------
 existing_path="$INSTALL_DIR/$BINARY"
-existing_version=""
-if [ -x "$existing_path" ]; then
-  existing_version=$("$existing_path" --version 2>/dev/null | head -n1 | tr -d '[:space:]' || true)
-  case "$existing_version" in
-    v*|dev|"") ;;
-    *) existing_version="v$existing_version" ;;
-  esac
-  if [ -n "$existing_version" ]; then
-    step "Found existing ${BINARY} ${C_BOLD}${existing_version}${C_RESET}"
+version_path="$INSTALL_DIR/.wavo-version"
+existing=false
+installed_version=""
+if [ -e "$existing_path" ] || [ -L "$existing_path" ]; then
+  if [ ! -f "$existing_path" ] || [ -L "$existing_path" ]; then
+    err "refusing to replace a non-regular or symbolic-link target: $existing_path"
   fi
+  existing=true
+  step "Found existing ${BINARY}"
+fi
+if [ -e "$version_path" ] || [ -L "$version_path" ]; then
+  if [ ! -f "$version_path" ] || [ -L "$version_path" ]; then
+    err "refusing to replace an unsafe version record: $version_path"
+  fi
+  installed_version=$(awk 'NR == 1 { value=$0 } NR > 1 { invalid=1 } END { if (!invalid) print value }' "$version_path")
+  valid_release_tag "$installed_version" || installed_version=""
 fi
 
 # ---------------------------------------------------------------------------
 # Resolve version (latest by default)
 # ---------------------------------------------------------------------------
 if [ "$VERSION" = "latest" ]; then
-  # Follow redirect on /releases/latest to capture the tag without auth.
-  VERSION=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
-    "https://github.com/$REPO/releases/latest" 2>/dev/null \
-    | sed -n 's|.*/tag/\(v[^/]*\).*|\1|p')
-  [ -n "$VERSION" ] || err "could not resolve latest version (check network)"
+  # The releases collection includes prereleases; GitHub orders it newest first.
+  VERSION=$(curl -fsSL --connect-timeout 10 --max-time 30 --max-filesize 1048576 \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$REPO/releases?per_page=1" 2>/dev/null \
+    | awk -F'"' '/"tag_name"[[:space:]]*:/{print $4; exit}')
+  [ -n "$VERSION" ] || err "could not resolve latest Wavo CLI version"
 fi
-case "$VERSION" in
-  v*) ;;
-  *) VERSION="v$VERSION" ;;
-esac
+valid_release_tag "$VERSION" || err "invalid Wavo CLI release tag"
+if [ "$requested_latest" = true ] && [ "$existing" = true ]; then
+  [ -n "$installed_version" ] || err "cannot safely compare the installed version; use an explicit WAVO_VERSION"
+  release_is_newer_or_equal "$VERSION" "$installed_version" || err "refusing an implicit downgrade from $installed_version to $VERSION"
+fi
 ver_clean="${VERSION#v}"
 
-if [ -z "$existing_version" ]; then
+if [ "$existing" = false ]; then
   install_mode=install
   step "Resolved version ${C_BOLD}${VERSION}${C_RESET}"
-elif [ "$existing_version" = "$VERSION" ]; then
+elif [ "$installed_version" = "$VERSION" ]; then
   install_mode=reinstall
   step "Resolved version ${C_BOLD}${VERSION}${C_RESET} (already up to date — reinstalling)"
 else
   install_mode=update
-  step "Updating ${C_BOLD}${existing_version}${C_RESET} → ${C_BOLD}${VERSION}${C_RESET}"
+  step "Installing ${C_BOLD}${VERSION}${C_RESET} over the existing binary"
 fi
 
 # ---------------------------------------------------------------------------
@@ -118,21 +214,29 @@ asset_url="https://github.com/$REPO/releases/download/${VERSION}/${asset}"
 checksum_url="https://github.com/$REPO/releases/download/${VERSION}/checksums.txt"
 
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+staged=""
+staged_version=""
+cleanup() {
+  rm -rf "$tmp"
+  [ -z "$staged" ] || rm -f "$staged"
+  [ -z "$staged_version" ] || rm -f "$staged_version"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 step "Downloading ${asset}"
-if ! curl -fsSL "$asset_url" -o "$tmp/$asset"; then
+if ! curl -fsSL --connect-timeout 10 --max-time 300 "$asset_url" -o "$tmp/$asset"; then
   err "failed to download ${asset_url} (no release for ${os}/${arch}?)"
 fi
 
 # ---------------------------------------------------------------------------
 # Verify checksum (sha256)
 # ---------------------------------------------------------------------------
-if ! curl -fsSL "$checksum_url" -o "$tmp/checksums.txt" 2>/dev/null; then
+if ! curl -fsSL --connect-timeout 10 --max-time 30 "$checksum_url" -o "$tmp/checksums.txt" 2>/dev/null; then
   err "failed to download checksums.txt; refusing to install without checksum verification"
 fi
 
-expected=$(grep " ${asset}\$" "$tmp/checksums.txt" | awk '{print $1}')
+expected=$(awk -v asset="$asset" '$2 == asset && length($1) == 64 && $1 ~ /^[0-9a-fA-F]+$/ { count++; hash=$1 } END { if (count == 1) print hash }' "$tmp/checksums.txt")
 if [ -z "$expected" ]; then
   err "${asset} not listed in checksums.txt; refusing to install without checksum verification"
 fi
@@ -153,20 +257,70 @@ step "Verified checksum"
 # ---------------------------------------------------------------------------
 # Extract and install
 # ---------------------------------------------------------------------------
-tar -xzf "$tmp/$asset" -C "$tmp"
-[ -f "$tmp/$BINARY" ] || err "archive did not contain a '$BINARY' binary"
+archive_names="$tmp/archive-names.txt"
+archive_verbose="$tmp/archive-verbose.txt"
+if ! tar -tzf "$tmp/$asset" > "$archive_names" 2>/dev/null; then
+  err "invalid release archive"
+fi
+
+license_count=0
+notice_count=0
+readme_count=0
+installer_count=0
+binary_count=0
+while IFS= read -r entry; do
+  case "$entry" in
+    LICENSE) license_count=$((license_count + 1)) ;;
+    NOTICE.md) notice_count=$((notice_count + 1)) ;;
+    README.md) readme_count=$((readme_count + 1)) ;;
+    install.sh) installer_count=$((installer_count + 1)) ;;
+    wavo) binary_count=$((binary_count + 1)) ;;
+    *) err "release archive contains an unexpected or unsafe path" ;;
+  esac
+done < "$archive_names"
+
+if [ "$license_count" -ne 1 ] || [ "$notice_count" -ne 1 ] || \
+   [ "$readme_count" -ne 1 ] || [ "$installer_count" -ne 1 ] || \
+   [ "$binary_count" -ne 1 ]; then
+  err "release archive does not contain the exact expected files"
+fi
+if ! LC_ALL=C tar -tvzf "$tmp/$asset" > "$archive_verbose" 2>/dev/null ||
+   ! awk 'substr($0, 1, 1) != "-" { exit 1 } END { if (NR != 5) exit 1 }' "$archive_verbose"; then
+  err "release archive contains a non-regular entry"
+fi
+if ! tar -xOzf "$tmp/$asset" "$BINARY" > "$tmp/$BINARY.extracted" 2>/dev/null; then
+  err "could not read the Wavo binary from the release archive"
+fi
+if [ ! -f "$tmp/$BINARY.extracted" ] || [ -L "$tmp/$BINARY.extracted" ]; then
+  err "archive did not contain a regular '$BINARY' binary"
+fi
 
 mkdir -p "$INSTALL_DIR"
+staged=$(mktemp "$INSTALL_DIR/.${BINARY}.tmp.XXXXXX")
+staged_version=$(mktemp "$INSTALL_DIR/.${BINARY}-version.tmp.XXXXXX")
 if has install; then
-  install -m 0755 "$tmp/$BINARY" "$INSTALL_DIR/$BINARY"
+  install -m 0755 "$tmp/$BINARY.extracted" "$staged"
 else
-  mv "$tmp/$BINARY" "$INSTALL_DIR/$BINARY"
-  chmod +x "$INSTALL_DIR/$BINARY"
+  cp "$tmp/$BINARY.extracted" "$staged"
+  chmod 0755 "$staged"
+fi
+printf '%s\n' "$VERSION" > "$staged_version"
+chmod 0644 "$staged_version"
+mv -f "$staged" "$INSTALL_DIR/$BINARY"
+staged=""
+mv -f "$staged_version" "$version_path"
+staged_version=""
+if [ ! -f "$existing_path" ] || [ -L "$existing_path" ] || [ ! -x "$existing_path" ]; then
+  err "installed Wavo target failed final verification"
+fi
+if [ ! -f "$version_path" ] || [ -L "$version_path" ] ||
+   [ "$(awk 'NR == 1 { value=$0 } NR > 1 { invalid=1 } END { if (!invalid) print value }' "$version_path")" != "$VERSION" ]; then
+  err "installed Wavo version record failed final verification"
 fi
 
 case "$install_mode" in
   reinstall) ok "Reinstalled ${C_BOLD}${BINARY} ${VERSION}${C_RESET} to ${INSTALL_DIR}/${BINARY}" ;;
-  update)    ok "Updated ${C_BOLD}${BINARY}${C_RESET} ${existing_version} → ${C_BOLD}${VERSION}${C_RESET} at ${INSTALL_DIR}/${BINARY}" ;;
+  update)    ok "Installed ${C_BOLD}${BINARY} ${VERSION}${C_RESET} over the existing binary at ${INSTALL_DIR}/${BINARY}" ;;
   *)         ok "Installed ${C_BOLD}${BINARY} ${VERSION}${C_RESET} to ${INSTALL_DIR}/${BINARY}" ;;
 esac
 

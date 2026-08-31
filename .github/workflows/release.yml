@@ -6,22 +6,50 @@ on:
       - "v*.*.*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  goreleaser:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v7
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Validate release tag and documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Invalid Wavo release tag: $tag"
+            exit 1
+          fi
+          version="${tag#v}"
+          core_and_pre="${version%%+*}"
+          if [[ "$core_and_pre" == *-* ]]; then
+            prerelease="${core_and_pre#*-}"
+            IFS=. read -ra identifiers <<< "$prerelease"
+            for identifier in "${identifiers[@]}"; do
+              if [[ "$identifier" =~ ^[0-9]+$ && ${#identifier} -gt 1 && "$identifier" == 0* ]]; then
+                echo "::error::Numeric prerelease identifiers cannot have leading zeroes"
+                exit 1
+              fi
+            done
+          fi
+          grep -Fq "## [$version] - " CHANGELOG.md
+          grep -Fq "WAVO_VERSION=$tag" README.md
+          grep -Fq "WAVO_VERSION=$tag" docs/BETA.md
 
       - name: Wavo branding gate
         run: |
@@ -34,11 +62,37 @@ jobs:
           go build -trimpath -o ./bin/wavo ./cmd/wavo
           ./scripts/check-branding.sh ./bin/wavo
 
+      - name: Validate installer
+        run: |
+          sh -n install.sh
+          shellcheck install.sh scripts/install-test.sh
+          ./scripts/install-test.sh
+
       - name: go vet
         run: go vet ./...
 
       - name: go test
         run: go test -race -count=1 ./...
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        # actions/checkout v7, pinned from the official v7 tag.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Go
+        # actions/setup-go v7, pinned from the official v7 tag.
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+          cache: true
 
       - name: Extract release notes from CHANGELOG.md
         run: |
@@ -58,7 +112,8 @@ jobs:
           cat "$RUNNER_TEMP/release_notes.md"
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
+        # goreleaser/goreleaser-action v7, pinned from the official v7 tag.
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94
         with:
           distribution: goreleaser
           version: "2.15.4"

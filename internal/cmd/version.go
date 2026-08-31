@@ -3,12 +3,16 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/iRaxe/wavo-cli/internal/brand"
+	"golang.org/x/mod/semver"
 )
+
+const maxReleaseResponseBytes = 1 << 20
 
 // VersionCmd is `wavo version` — prints the CLI version. Equivalent to
 // the `--version` flag, exposed as a subcommand for discoverability.
@@ -31,20 +35,26 @@ func (c *VersionCmd) Run(app *App) error {
 		return fmt.Errorf("check failed: %w", err)
 	}
 
+	_, err = fmt.Fprint(app.Printer.Writer, versionUpdateMessage(v, latest))
+	return err
+}
+
+func versionUpdateMessage(installed, latest string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\n", brand.Command, displayVersion(v))
+	fmt.Fprintf(&b, "%s %s\n", brand.Command, displayVersion(installed))
 	fmt.Fprintf(&b, "Latest: %s\n\n", displayVersion(latest))
 	switch {
-	case v == "dev":
+	case installed == "dev":
 		b.WriteString("Running a dev build.\n")
-	case normalizeVersion(v) == normalizeVersion(latest):
+	case comparableVersion(installed) == "" || comparableVersion(latest) == "":
+		b.WriteString("Unable to compare versions safely.\n")
+	case semver.Compare(comparableVersion(latest), comparableVersion(installed)) <= 0:
 		b.WriteString("Up to date.\n")
 	default:
 		b.WriteString("Update available.\n")
 		fmt.Fprintf(&b, "  curl -fsSL %s | sh\n", brand.InstallURL)
 	}
-	_, err = fmt.Fprint(app.Printer.Writer, b.String())
-	return err
+	return b.String()
 }
 
 func displayVersion(v string) string {
@@ -75,18 +85,35 @@ func fetchLatestRelease(url string) (string, error) {
 		return "", fmt.Errorf("GitHub API returned %s", resp.Status)
 	}
 
-	var body struct {
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxReleaseResponseBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("read GitHub release response: %w", err)
+	}
+	if len(body) > maxReleaseResponseBytes {
+		return "", fmt.Errorf("GitHub release response exceeds %d bytes", maxReleaseResponseBytes)
+	}
+
+	var releases []struct {
 		TagName string `json:"tag_name"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return "", err
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return "", fmt.Errorf("decode GitHub release response: %w", err)
 	}
-	if body.TagName == "" {
-		return "", fmt.Errorf("no tag_name in response")
+	if len(releases) == 0 || releases[0].TagName == "" {
+		return "", fmt.Errorf("no Wavo release found")
 	}
-	return body.TagName, nil
+	if !semver.IsValid(releases[0].TagName) {
+		return "", fmt.Errorf("invalid Wavo release tag")
+	}
+	return releases[0].TagName, nil
 }
 
-func normalizeVersion(v string) string {
-	return strings.TrimPrefix(strings.TrimSpace(v), "v")
+func comparableVersion(v string) string {
+	if !strings.HasPrefix(v, "v") {
+		v = "v" + v
+	}
+	if !semver.IsValid(v) {
+		return ""
+	}
+	return v
 }

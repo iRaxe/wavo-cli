@@ -57,6 +57,10 @@ jobs:
       - name: go test
         run: go test -race -count=1 -covermode=atomic -coverprofile=cover.out ./...
 
+      - name: Installer behavior
+        run: ./scripts/install-test.sh
+
+
       - name: Upload coverage profile
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v7
