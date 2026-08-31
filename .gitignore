@@ -32,8 +32,8 @@ go.work.sum
 # .vscode/
 
 # Binary
-/chatwoot
-/bin/chatwoot
+/wavo
+/bin/wavo
 
 # Extracted release notes (release workflow writes these; safety net for local dry runs)
 release_notes.md

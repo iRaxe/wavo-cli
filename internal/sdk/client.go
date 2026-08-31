@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chatwoot/cli/internal/output"
+	"github.com/iRaxe/wavo-cli/internal/output"
 )
 
 type Client struct {

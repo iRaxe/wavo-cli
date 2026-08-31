@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chatwoot/cli/internal/config"
-	"github.com/chatwoot/cli/internal/lock"
-	"github.com/chatwoot/cli/internal/output"
-	"github.com/chatwoot/cli/internal/sdk"
+	"github.com/iRaxe/wavo-cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/lock"
+	"github.com/iRaxe/wavo-cli/internal/output"
+	"github.com/iRaxe/wavo-cli/internal/sdk"
 )
 
 // -----------------------------------------------------------------------------

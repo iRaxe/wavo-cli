@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chatwoot/cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/config"
 )
 
 func TestApiCmdCallsAccountScopedEndpoint(t *testing.T) {

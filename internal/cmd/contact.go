@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/chatwoot/cli/internal/output"
-	"github.com/chatwoot/cli/internal/sdk"
+	"github.com/iRaxe/wavo-cli/internal/output"
+	"github.com/iRaxe/wavo-cli/internal/sdk"
 )
 
 // -----------------------------------------------------------------------------

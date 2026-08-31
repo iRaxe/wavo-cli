@@ -10,7 +10,8 @@ import (
 	"strings"
 
 	"github.com/alecthomas/kong"
-	"github.com/chatwoot/cli/internal/cmd"
+	"github.com/iRaxe/wavo-cli/internal/brand"
+	"github.com/iRaxe/wavo-cli/internal/cmd"
 	kongcompletion "github.com/jotaen/kong-completion"
 )
 
@@ -43,8 +44,8 @@ func main() {
 
 	var cli cmd.CLI
 	parser := kong.Must(&cli,
-		kong.Name("chatwoot"),
-		kong.Description("CLI for Chatwoot."),
+		kong.Name(brand.Command),
+		kong.Description("CLI for "+brand.Product+"."),
 		kong.Vars{"version": version},
 		kong.UsageOnError(),
 		kong.Help(idFirstHelpPrinter),

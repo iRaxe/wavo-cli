@@ -1,6 +1,6 @@
-module github.com/chatwoot/cli
+module github.com/iRaxe/wavo-cli
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/alecthomas/kong v1.16.0

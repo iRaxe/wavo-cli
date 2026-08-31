@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/chatwoot/cli/internal/config"
-	"github.com/chatwoot/cli/internal/output"
-	"github.com/chatwoot/cli/internal/sdk"
+	"github.com/iRaxe/wavo-cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/output"
+	"github.com/iRaxe/wavo-cli/internal/sdk"
 )
 
 // App holds shared state passed to every command's Run method.

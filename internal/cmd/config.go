@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/chatwoot/cli/internal/config"
-	"github.com/chatwoot/cli/internal/output"
+	"github.com/iRaxe/wavo-cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/output"
 )
 
 type ConfigCmd struct {

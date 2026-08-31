@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/chatwoot/cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/config"
 	"github.com/zalando/go-keyring"
 )
 

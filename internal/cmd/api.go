@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chatwoot/cli/internal/output"
+	"github.com/iRaxe/wavo-cli/internal/output"
 )
 
 type ApiCmd struct {

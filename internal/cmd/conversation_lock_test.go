@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chatwoot/cli/internal/lock"
+	"github.com/iRaxe/wavo-cli/internal/lock"
 )
 
 // Mutating conversation commands must fail fast when another process holds the

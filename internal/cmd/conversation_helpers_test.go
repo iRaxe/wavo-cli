@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chatwoot/cli/internal/sdk"
+	"github.com/iRaxe/wavo-cli/internal/sdk"
 )
 
 func TestParseExtendedDuration(t *testing.T) {

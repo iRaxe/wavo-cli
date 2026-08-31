@@ -1,15 +1,15 @@
 [tools]
-go = "latest"
+go = "1.26.6"
 watchexec = "latest"
 "aqua:golangci/golangci-lint" = "latest"
 
 [tasks.build]
 description = "Build the CLI"
-run = "mkdir -p ./bin && go build -o ./bin/chatwoot ./cmd/chatwoot/"
+run = "mkdir -p ./bin && go build -o ./bin/wavo ./cmd/wavo/"
 
 [tasks.dev]
 description = "Auto-build on Go file changes (dev profile: separate config + keyring)"
-run = "mkdir -p ./bin && watchexec -e go --restart --debounce 300 -- go build -tags dev -o ./bin/chatwoot ./cmd/chatwoot/"
+run = "mkdir -p ./bin && watchexec -e go --restart --debounce 300 -- go build -tags dev -o ./bin/wavo ./cmd/wavo/"
 
 [tasks.lint]
 description = "Run golangci-lint across the module"

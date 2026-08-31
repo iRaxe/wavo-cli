@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/chatwoot/cli/internal/config"
+	"github.com/iRaxe/wavo-cli/internal/config"
 )
 
 // ErrLocked is returned when another process already holds the lock.
