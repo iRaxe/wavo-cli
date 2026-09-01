@@ -3,12 +3,30 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/iRaxe/wavo-cli/internal/brand"
 	"github.com/zalando/go-keyring"
 )
+
+func TestCheckKeyringAvailable(t *testing.T) {
+	keyring.MockInit()
+	if err := CheckKeyringAvailable(); err != nil {
+		t.Fatalf("CheckKeyringAvailable() error = %v", err)
+	}
+}
+
+func TestCheckKeyringAvailableReturnsBackendFailure(t *testing.T) {
+	backendErr := fmt.Errorf("secret service is unavailable")
+	keyring.MockInitWithError(backendErr)
+
+	err := CheckKeyringAvailable()
+	if !errors.Is(err, backendErr) {
+		t.Fatalf("CheckKeyringAvailable() error = %v, want backend failure", err)
+	}
+}
 
 func initMockKeyring(t *testing.T) {
 	t.Helper()

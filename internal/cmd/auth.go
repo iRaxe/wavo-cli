@@ -24,7 +24,9 @@ type AuthCmd struct {
 	Status AuthStatusCmd `cmd:"" help:"Show current authentication status."`
 }
 
-type AuthLoginCmd struct{}
+type AuthLoginCmd struct {
+	Headless bool `help:"Use WAVO_API_KEY without storing a credential in the OS keyring."`
+}
 
 var (
 	errLoginProfile            = errors.New("authentication for " + brand.Product + " failed; verify credentials or run '" + brand.Command + " auth login'")
@@ -39,10 +41,42 @@ func (c *AuthLoginCmd) Run(app *App) error {
 		return fmt.Errorf("interactive login requires a terminal; set %s for headless use", config.APIKeyEnv)
 	}
 	reader := bufio.NewReader(os.Stdin)
+	if c.Headless {
+		return c.loginHeadless(app, reader, os.Stdout, config.IsDev)
+	}
+	if err := ensureInteractiveLoginKeyring(); err != nil {
+		return err
+	}
 	return c.login(app, reader, os.Stdout, config.IsDev, func() (string, error) { return readAPIKey(reader) })
 }
 
 func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHTTP bool, readToken func() (string, error)) error {
+	return c.loginWithPersistence(reader, writer, allowHTTP, readToken, persistLogin, "")
+}
+
+func (c *AuthLoginCmd) loginHeadless(_ *App, reader io.Reader, writer io.Writer, allowHTTP bool) error {
+	apiKey := strings.TrimSpace(os.Getenv(config.APIKeyEnv))
+	if apiKey == "" {
+		return fmt.Errorf("%s is required for headless login; set it in the current shell without placing it in command arguments or config files", config.APIKeyEnv)
+	}
+	return c.loginWithPersistence(
+		reader,
+		writer,
+		allowHTTP,
+		func() (string, error) { return apiKey, nil },
+		persistHeadlessLogin,
+		fmt.Sprintf("Credential: environment (%s is not saved)\n", config.APIKeyEnv),
+	)
+}
+
+func (c *AuthLoginCmd) loginWithPersistence(
+	reader io.Reader,
+	writer io.Writer,
+	allowHTTP bool,
+	readToken func() (string, error),
+	persist func(*config.Config, string) error,
+	credentialNotice string,
+) error {
 	bufferedReader := bufio.NewReader(reader)
 
 	if _, err := fmt.Fprintf(writer, "%s CLI Login\n", brand.Product); err != nil {
@@ -89,7 +123,7 @@ func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHT
 	}
 	cfg := &config.Config{BaseURL: baseURL, AccountID: accountID, UserID: profile.ID}
 
-	if err := persistLogin(cfg, apiKey); err != nil {
+	if err := persist(cfg, apiKey); err != nil {
 		if errors.Is(err, lock.ErrLocked) {
 			return err
 		}
@@ -101,6 +135,18 @@ func (c *AuthLoginCmd) login(_ *App, reader io.Reader, writer io.Writer, allowHT
 	}
 	if _, err := fmt.Fprintf(writer, "Workspace: %s\n", selectedAccount(displayProfile.Accounts, accountID)); err != nil {
 		return errLoginResultWrite
+	}
+	if credentialNotice != "" {
+		if _, err := fmt.Fprint(writer, credentialNotice); err != nil {
+			return errLoginResultWrite
+		}
+	}
+	return nil
+}
+
+func ensureInteractiveLoginKeyring() error {
+	if err := config.CheckKeyringAvailable(); err != nil {
+		return fmt.Errorf("OS keyring is unavailable; for headless use, set %s and run '%s auth login --headless'", config.APIKeyEnv, brand.Command)
 	}
 	return nil
 }
@@ -122,6 +168,19 @@ func persistLogin(cfg *config.Config, apiKey string) error {
 			return fmt.Errorf("failed to save config: %w (also failed to restore the previous %s credential: %v)", err, brand.Product, rollbackErr)
 		}
 		return fmt.Errorf("failed to save config: %w", err)
+	}
+	return nil
+}
+
+func persistHeadlessLogin(cfg *config.Config, _ string) error {
+	authLock, err := lock.AcquireAuth()
+	if err != nil {
+		return fmt.Errorf("failed to persist %s headless login: %w", brand.Product, err)
+	}
+	defer authLock.Release()
+
+	if err := config.Save(cfg); err != nil {
+		return fmt.Errorf("failed to save nonsecret %s config: %w", brand.Product, err)
 	}
 	return nil
 }

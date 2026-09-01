@@ -1,8 +1,7 @@
 # wavo-cli
 
-Source repository for the pre-release Wavo CLI and its bundled AI-agent skill.
-The public installer and release assets must not be described as available until
-the beta release is announced.
+Source repository for the Wavo CLI beta and its bundled AI-agent skill. Keep
+customer documentation aligned with the currently announced pinned beta tag.
 
 ## Build & Run
 
@@ -56,6 +55,9 @@ docs/BETA.md           Beta operator and customer onboarding
 - Production builds use `~/.wavo/config.yaml` and keyring service `wavo-cli`.
   `-tags dev` builds use `config.dev.yaml` and `wavo-cli-dev` so development
   cannot read or remove production credentials.
+- `auth login --headless` validates `WAVO_API_KEY` and persists only nonsecret
+  config. It must never read or write the operating-system keyring or serialize
+  the token.
 
 ## Wavo API Quirks
 

@@ -16,6 +16,17 @@ const (
 	apiKeyKeyringEntry = "api-key"
 )
 
+// CheckKeyringAvailable verifies that the operating-system keyring backend can
+// be reached without changing any credential. ErrNotFound means the backend is
+// available and simply has no Wavo entry yet.
+func CheckKeyringAvailable() error {
+	_, err := keyring.Get(keyringService, apiKeyKeyringEntry)
+	if err == nil || errors.Is(err, keyring.ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
 // keyringService is build-profile specific ("wavo-cli" for prod,
 // "wavo-cli-dev" for dev). Namespacing the whole service per profile keeps
 // logout's DeleteAll(keyringService) scoped to the active build, so a dev logout

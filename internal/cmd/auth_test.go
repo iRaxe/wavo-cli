@@ -510,6 +510,103 @@ func TestAuthLoginRequiresTerminal(t *testing.T) {
 	}
 }
 
+func TestAuthLoginKeyringFailureGivesHeadlessGuidanceBeforePrompt(t *testing.T) {
+	isolateAuthEnv(t)
+	keyring.MockInitWithError(errors.New("The name is not activatable"))
+
+	err := ensureInteractiveLoginKeyring()
+	if err == nil {
+		t.Fatal("ensureInteractiveLoginKeyring() unexpectedly succeeded")
+	}
+	for _, want := range []string{"keyring is unavailable", config.APIKeyEnv, "wavo auth login --headless"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("keyring error %q missing %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "not activatable") {
+		t.Fatalf("keyring error exposed backend diagnostic: %q", err)
+	}
+	if cfg, loadErr := config.Load(); loadErr != nil || cfg != nil {
+		t.Fatalf("keyring preflight persisted config: cfg=%#v err=%v", cfg, loadErr)
+	}
+}
+
+func TestAuthLoginKeyringPreflightAcceptsAvailableBackend(t *testing.T) {
+	isolateAuthEnv(t)
+	if err := ensureInteractiveLoginKeyring(); err != nil {
+		t.Fatalf("ensureInteractiveLoginKeyring() error = %v", err)
+	}
+}
+
+func TestAuthLoginHeadlessRequiresEnvironmentCredential(t *testing.T) {
+	isolateAuthEnv(t)
+
+	err := (&AuthLoginCmd{Headless: true}).loginHeadless(
+		&App{}, strings.NewReader("\n"), io.Discard, true,
+	)
+	if err == nil || !strings.Contains(err.Error(), config.APIKeyEnv) {
+		t.Fatalf("loginHeadless() error = %v, want %s guidance", err, config.APIKeyEnv)
+	}
+	assertNoSavedLogin(t, &config.Config{BaseURL: brand.DefaultBaseURL, AccountID: 7})
+}
+
+func TestAuthLoginHeadlessValidatesAndSavesOnlyNonsecretConfig(t *testing.T) {
+	isolateAuthEnv(t)
+	const token = "headless-environment-token"
+	t.Setenv(config.APIKeyEnv, token)
+	keyring.MockInitWithError(errors.New("keyring must not be touched"))
+	server := loginProfileServer(t, `{
+		"id": 23,
+		"name": "Headless Operator",
+		"email": "operator@wavo.example",
+		"accounts": [{"id": 6, "name": "Easycom", "role": "administrator"}]
+	}`)
+	defer server.Close()
+
+	var out bytes.Buffer
+	err := (&AuthLoginCmd{Headless: true}).loginHeadless(
+		&App{}, strings.NewReader(server.URL+"\n"), &out, true,
+	)
+	if err != nil {
+		t.Fatalf("loginHeadless() error = %v", err)
+	}
+	cfg, err := config.Load()
+	if err != nil || cfg == nil {
+		t.Fatalf("config.Load() = (%#v, %v)", cfg, err)
+	}
+	if cfg.BaseURL != server.URL || cfg.AccountID != 6 || cfg.UserID != 23 {
+		t.Fatalf("saved config = %#v", cfg)
+	}
+	configPath, err := config.ConfigPath()
+	if err != nil {
+		t.Fatalf("config.ConfigPath(): %v", err)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if strings.Contains(string(data), token) {
+		t.Fatal("headless login persisted the environment credential")
+	}
+	configDir := filepath.Dir(configPath)
+	dirInfo, err := os.Stat(configDir)
+	if err != nil || dirInfo.Mode().Perm() != 0o700 {
+		t.Fatalf("config dir mode = %v, err = %v; want 0700", dirInfo, err)
+	}
+	fileInfo, err := os.Stat(configPath)
+	if err != nil || fileInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("config file mode = %v, err = %v; want 0600", fileInfo, err)
+	}
+	for _, want := range []string{"Workspace: 6 (Easycom)", "Credential: environment", "not saved"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("login output %q missing %q", out.String(), want)
+		}
+	}
+	if _, source, err := config.ResolveAPIKey(cfg); err != nil || source != config.CredentialSourceEnvironment {
+		t.Fatalf("ResolveAPIKey() source = %v, err = %v", source, err)
+	}
+}
+
 func TestLoginSuccessMessageStripsTerminalControls(t *testing.T) {
 	got := loginSuccessMessage("Eve\x1b]52;c;Zm9v\a", "eve@example.com\x1b[31m")
 	for _, disallowed := range []string{"\x1b", "\a", "]52", "[31m"} {

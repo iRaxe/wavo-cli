@@ -33,9 +33,10 @@ mkdir -p "$fixture/scripts" "$fixture/docs" \
 cp "$checker" "$fixture/scripts/check-docs.sh"
 chmod +x "$fixture/scripts/check-docs.sh"
 
-pinned_install='curl -fsSL https://my.wavo.it/install-cli | env WAVO_VERSION=v0.1.0-beta.1 sh'
-printf '%s\n' "$pinned_install" >"$fixture/README.md"
-printf '%s\n' "$pinned_install" >"$fixture/docs/BETA.md"
+pinned_install='curl -fsSL https://my.wavo.it/install-cli | env WAVO_VERSION=v0.1.0-beta.2 sh'
+headless_login='wavo auth login --headless'
+printf '%s\n%s\n' "$pinned_install" "$headless_login" >"$fixture/README.md"
+printf '%s\n%s\n' "$pinned_install" "$headless_login" >"$fixture/docs/BETA.md"
 cp "$repo_root/skills/wavo-cli/SKILL.md" \
   "$fixture/skills/wavo-cli/SKILL.md"
 cp "$repo_root/skills/wavo-cli/references/raw-api.md" \
@@ -54,7 +55,15 @@ if "$fixture/scripts/check-docs.sh" >/dev/null 2>&1; then
 else
   pass "unpinned prerelease installer is rejected"
 fi
-printf '%s\n' "$pinned_install" >"$fixture/README.md"
+printf '%s\n%s\n' "$pinned_install" "$headless_login" >"$fixture/README.md"
+
+printf '%s\n' "$pinned_install" >"$fixture/docs/BETA.md"
+if "$fixture/scripts/check-docs.sh" >/dev/null 2>&1; then
+  fail "missing headless login guidance is rejected"
+else
+  pass "missing headless login guidance is rejected"
+fi
+printf '%s\n%s\n' "$pinned_install" "$headless_login" >"$fixture/docs/BETA.md"
 
 sed 's/^name: wavo-cli$/name: altered/' \
   "$fixture/skills/wavo-cli/SKILL.md" \

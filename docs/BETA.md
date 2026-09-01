@@ -1,12 +1,11 @@
 # Wavo CLI beta onboarding
 
-Wavo CLI is pre-release software intended for a limited, announced beta. Do not
-rely on the installer or release assets before Wavo announces the beta tag. Beta
+Wavo CLI is pre-release software intended for a limited, announced beta. Beta
 operators need a Wavo user with the least-privileged workspace role sufficient
-for their work, a corresponding personal API token, and access to the
-operating-system keyring.
+for their work and a corresponding personal API token. Desktop logins use the
+operating-system keyring; headless servers use a process environment credential.
 
-Release archives are planned for:
+Release archives are available for:
 
 - Linux on x86-64 and arm64 (`.tar.gz`)
 - macOS on x86-64 and Apple silicon (`.tar.gz`)
@@ -14,17 +13,16 @@ Release archives are planned for:
 
 ## Install and verify
 
-After Wavo announces the beta release, install on Linux or macOS and complete the
-interactive login:
+Install on Linux or macOS and complete the interactive login:
 
 ```bash
-curl -fsSL https://my.wavo.it/install-cli | env WAVO_VERSION=v0.1.0-beta.1 sh
+curl -fsSL https://my.wavo.it/install-cli | env WAVO_VERSION=v0.1.0-beta.2 sh
 wavo auth login
 wavo config view
 wavo convs --assignee me -s open -o json
 ```
 
-This command pins the announced `v0.1.0-beta.1` tag because the stable `latest`
+This command pins the announced `v0.1.0-beta.2` tag because the stable `latest`
 release channel does not select prereleases. Use the tag from the beta
 announcement. A later announced stable release may use the unpinned installer
 channel.
@@ -76,6 +74,22 @@ workspace in another.
 Never paste a Wavo token into a prompt, ticket, chat message, command argument,
 or diagnostic report.
 
+On a server without a keyring, load the token without putting it in shell
+history and use the supported headless login:
+
+```bash
+read -rsp "Wavo API Key: " WAVO_API_KEY
+export WAVO_API_KEY
+echo
+wavo auth login --headless
+```
+
+This validates the user and selected workspace, then writes only `base_url`,
+`account_id`, and cached `user_id` to `~/.wavo/config.yaml`. It never writes the
+token. The environment variable must remain set for Wavo commands in that shell;
+run `unset WAVO_API_KEY` when finished. Do not put it in `.bashrc` or another
+plaintext profile.
+
 ## Revoke local access
 
 Run logout before removing local state:
@@ -111,12 +125,12 @@ Local logout cannot revoke a token on a device you no longer control.
 ## Verify a Windows download
 
 Set the announced beta tag and version explicitly. The tag includes `v`; the
-archive version does not. These commands illustrate the planned x86-64 asset;
+archive version does not. These commands illustrate the x86-64 asset;
 use `arm64` in the archive name on Windows arm64.
 
 ```powershell
-$BetaTag = "v0.1.0-beta.1"
-$BetaVersion = "0.1.0-beta.1"
+$BetaTag = "v0.1.0-beta.2"
+$BetaVersion = "0.1.0-beta.2"
 $Archive = "wavo_${BetaVersion}_Windows_x86_64.zip"
 $Base = "https://github.com/iRaxe/wavo-cli/releases/download/$BetaTag"
 Invoke-WebRequest "$Base/$Archive" -OutFile $Archive

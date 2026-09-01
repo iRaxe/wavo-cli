@@ -46,9 +46,12 @@ user ID for a keyring-backed login. If identity verification is necessary,
 disclose that possible local update, show the exact command and workspace, and
 obtain command-specific approval first.
 
-If authentication is absent, explain that `wavo auth login` is interactive. Do
-not ask the user to paste a token or run login on their behalf before the target
-workspace can be confirmed.
+If authentication is absent, explain that desktop login uses `wavo auth login`.
+On a server without an operating-system keyring, have the user set
+`WAVO_API_KEY` privately in their own shell and run
+`wavo auth login --headless`; this validates the identity and workspace while
+saving only nonsecret config. Do not ask the user to paste a token or run login
+on their behalf before the target workspace can be confirmed.
 
 For local interactive use, the token belongs only in the operating-system
 keyring. `~/.wavo/config.yaml` contains nonsecret settings. `WAVO_API_KEY` is a

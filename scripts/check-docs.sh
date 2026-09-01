@@ -13,7 +13,14 @@ readme="$repo_root/README.md"
 beta="$repo_root/docs/BETA.md"
 skill_dir="$repo_root/skills/wavo-cli"
 skill="$skill_dir/SKILL.md"
-pinned_install='curl -fsSL https://my.wavo.it/install-cli | env WAVO_VERSION=v0.1.0-beta.1 sh'
+pinned_install='curl -fsSL https://my.wavo.it/install-cli | env WAVO_VERSION=v0.1.0-beta.2 sh'
+
+for doc in "$readme" "$beta" "$skill"; do
+  grep -Fq 'wavo auth login --headless' "$doc" || {
+    printf 'missing headless login guidance in %s\n' "$doc" >&2
+    exit 1
+  }
+done
 unpinned_install='curl -fsSL https://my.wavo.it/install-cli | sh'
 
 for required_file in "$readme" "$beta" "$skill"; do
