@@ -153,7 +153,8 @@ output, not human text. `-o csv` is for table-shaped output. Exit code `0` means
 success; a nonzero exit means failure, with errors on stderr. Important JSON
 shapes are:
 
-- `convs`: `.data.payload[]`, with queue counts in `.data.meta`;
+- `convs`, including `convs --contact ID` and `contact ID conversations`:
+  `.data.payload[]`, with queue counts in `.data.meta`;
 - `contacts`: `.payload[]`, with pagination metadata in `.meta`;
 - conversation messages: `.payload[]`;
 - a single conversation, contact, inbox, or article: the returned object.
@@ -181,6 +182,13 @@ miss:
   `convs --query`.
 - `contact ID conversations`, `inboxes`, `agents`, `labels`, and `teams` are
   read-only workspace queries.
+- `contact ID conversations` filters and paginates on the server. It accepts
+  `--status` (including `all`), `--assignee` (`me`, `assigned`, `unassigned`,
+  `all`), `--inbox`, `--team`, `--label`, and `--page`, and defaults to
+  `--status open --assignee all`.
+- `convs --contact ID` is the same server-side query from the plural noun.
+  `--query` cannot be combined with `--contact`: message-content search is not
+  a supported conversation-filter attribute.
 - `hcs`, `hc articles`, and `hc article` are read-only help-center queries.
 - `hc default` reads without arguments; a slug or `--clear` mutates local
   config.
@@ -212,7 +220,15 @@ boundaries:
 ```bash
 wavo config view
 wavo contacts --search "<minimized-query>" -o json
-wavo contact "$CONTACT_ID" conversations -o json
+wavo contact "$CONTACT_ID" conversations --status open --assignee all -o json
+```
+
+Keep the same filters on every request while advancing the 1-based `--page`
+number; both conversation forms return the same `.data.payload[]` shape:
+
+```bash
+wavo contact "$CONTACT_ID" conversations --status open --page 2 -o json
+wavo convs --contact "$CONTACT_ID" --status open --page 2 -o json
 ```
 
 Inspect help-center content without changing the local default:

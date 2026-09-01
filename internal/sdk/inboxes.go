@@ -7,12 +7,12 @@ type InboxesService struct {
 }
 
 type InboxFull struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	ChannelType string `json:"channel_type"`
-	AvatarURL   string `json:"avatar_url"`
-	ChannelID   int    `json:"channel_id,omitempty"`
-	GreetingEnabled bool `json:"greeting_enabled"`
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	ChannelType     string `json:"channel_type"`
+	AvatarURL       string `json:"avatar_url"`
+	ChannelID       int    `json:"channel_id,omitempty"`
+	GreetingEnabled bool   `json:"greeting_enabled"`
 	GreetingMessage string `json:"greeting_message"`
 }
 

@@ -10,6 +10,7 @@ import (
 var expectedApplicationPaths = []string{
 	"/api/v1/profile",
 	"/api/v1/accounts/{account_id}/conversations",
+	"/api/v1/accounts/{account_id}/conversations/filter",
 	"/api/v1/accounts/{account_id}/conversations/{conversation_id}/messages",
 }
 

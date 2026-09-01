@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Native contact filtering and pagination for conversation lists through
+  `wavo convs --contact <id>` and `wavo contact <id> conversations`, backed by
+  the Wavo conversation filter API.
+- `--status all`, `--assignee assigned`, `--inbox`, `--team`, `--label`, and
+  `--page` filters on `wavo contact <id> conversations`.
+
+### Changed
+
+- `wavo contact <id> conversations` now reads the conversation filter endpoint
+  instead of the unfiltered contact conversations endpoint, so `-o json` returns
+  the standard conversation-list `.data.payload[]` shape.
+
 ## [0.1.0-beta.2] - 2026-09-01
 
 ### Fixed

@@ -23,6 +23,10 @@ func TestValidateFile(t *testing.T) {
       "parameters": [{"in":"path","name":"account_id","required":true,"schema":{"type":"integer"}}],
       "get": {"responses": {"200": {"description": "ok"}}}
     },
+    "/api/v1/accounts/{account_id}/conversations/filter": {
+      "parameters": [{"in":"path","name":"account_id","required":true,"schema":{"type":"integer"}}],
+      "post": {"responses": {"200": {"description": "ok"}}}
+    },
     "/api/v1/accounts/{account_id}/conversations/{conversation_id}/messages": {
       "parameters": [
         {"in":"path","name":"account_id","required":true,"schema":{"type":"integer"}},

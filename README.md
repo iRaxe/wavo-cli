@@ -67,6 +67,7 @@ Wavo uses noun-first, ID-first commands:
 wavo convs                                  # Your open conversations
 wavo convs --assignee all --inbox 5         # Open conversations in inbox 5
 wavo convs --query "refund" -o json         # Search message content
+wavo convs --contact 456 -s open -p 2       # Page a contact's open conversations
 
 wavo conv 123                               # View a conversation
 wavo conv 123 messages -o json              # Read its messages
@@ -81,7 +82,7 @@ wavo conv 123 priority urgent               # urgent|high|medium|low|none
 
 wavo contacts --search "customer@example.com" -o json
 wavo contact 456
-wavo contact 456 conversations -o json
+wavo contact 456 conversations -o json      # Server-side filters and paging
 
 wavo inboxes -o json
 wavo inbox 5 -o json
