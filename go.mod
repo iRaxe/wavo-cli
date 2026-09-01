@@ -7,7 +7,7 @@ require (
 	github.com/getkin/kin-openapi v0.145.0
 	github.com/jotaen/kong-completion v0.0.14
 	github.com/zalando/go-keyring v0.2.8
-	golang.org/x/mod v0.8.0
+	golang.org/x/mod v0.40.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
