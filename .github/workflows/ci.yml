@@ -104,7 +104,7 @@ jobs:
 
       - name: Coverage report
         # fgrosse/go-coverage-report v1.3.1, pinned to the peeled release commit.
-        uses: fgrosse/go-coverage-report@e432de98ee94a276e8f666d25bfd76347665f75b
+        uses: fgrosse/go-coverage-report@2eb52af4e808426e2d4edd850ff8c9ca14fce029
         with:
           coverage-artifact-name: coverage-profile
           coverage-file-name: cover.out
