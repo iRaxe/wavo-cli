@@ -1207,14 +1207,14 @@ func runLogin(t *testing.T, input, token string, writer io.Writer) error {
 func authFailureServer(t *testing.T, mode, token string) (*httptest.Server, string, string) {
 	t.Helper()
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Errorf("redirect target received request with credential %q", r.Header.Get("api_access_token"))
+		t.Errorf("redirect target received request with credential %q", r.Header.Get("api-access-token"))
 		http.Error(w, "unexpected redirect", http.StatusInternalServerError)
 	}))
 	t.Cleanup(target.Close)
 	location := target.URL + "/provider-diagnostic?raw=" + url.QueryEscape(token) +
 		"&lower=" + percentEncodeLower(token) + "&mixed=" + percentEncodeMixed(token)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reflected := r.Header.Get("api_access_token")
+		reflected := r.Header.Get("api-access-token")
 		if mode == "redirect" {
 			w.Header().Set("Location", location)
 			w.WriteHeader(http.StatusFound)

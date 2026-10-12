@@ -76,7 +76,7 @@ func TestDefaultClientRefusesCrossOriginRedirectBeforeSendingToken(t *testing.T)
 			var targetRequests atomic.Int32
 			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				targetRequests.Add(1)
-				if got := r.Header.Get("api_access_token"); got != "" {
+				if got := r.Header.Get("api-access-token"); got != "" {
 					t.Errorf("redirect target received token %q", got)
 				}
 				_, _ = io.WriteString(w, `{}`)
@@ -248,7 +248,7 @@ func TestDefaultClientStopsAfterTenSameOriginRequests(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount := requests.Add(1)
-		if got := r.Header.Get("api_access_token"); got != token {
+		if got := r.Header.Get("api-access-token"); got != token {
 			t.Errorf("allowed hop token = %q, want %q", got, token)
 		}
 		if requestCount > 12 {
@@ -286,7 +286,7 @@ func TestDefaultClientAllowsSameOriginRedirect(t *testing.T) {
 	const token = "redirect-secret"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/final" {
-			if got := r.Header.Get("api_access_token"); got != token {
+			if got := r.Header.Get("api-access-token"); got != token {
 				t.Errorf("same-origin redirect token = %q, want %q", got, token)
 			}
 			_, _ = io.WriteString(w, `{}`)

@@ -97,7 +97,7 @@ func TestResolveAgentMeEnvironmentCredentialIgnoresCachedPersistedUser(t *testin
 	profileCalled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		profileCalled = true
-		if got := r.Header.Get("api_access_token"); got != "environment-user-b-token" {
+		if got := r.Header.Get("api-access-token"); got != "environment-user-b-token" {
 			t.Errorf("profile token = %q, want environment token", got)
 		}
 		_, _ = io.WriteString(w, `{"id":202,"name":"Environment User B"}`)

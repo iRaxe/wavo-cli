@@ -129,7 +129,7 @@ func (c *Client) request(method, path string, body io.Reader) (*http.Request, er
 		return nil, c.safeError(errAPIRequestFailed)
 	}
 
-	req.Header.Set("api_access_token", c.APIKey)
+	req.Header.Set("api-access-token", c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	return req, nil
@@ -141,7 +141,7 @@ func (c *Client) rawRequest(method, path string, body io.Reader) (*http.Request,
 		return nil, c.safeError(errAPIRequestFailed)
 	}
 
-	req.Header.Set("api_access_token", c.APIKey)
+	req.Header.Set("api-access-token", c.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
 	return req, nil

@@ -132,7 +132,7 @@ Authenticated user profile.
 ## Authentication
 
 - Token resolved by callers from `WAVO_API_KEY` or the OS keyring
-- Injected as `api_access_token` header on all requests
+- Injected as `api-access-token` header on all requests
 - Token must have `conversation:read`, `message:read`, `message:write` scopes
 
 ## File Organization
