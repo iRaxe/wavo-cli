@@ -260,7 +260,7 @@ workspace_replacement="$temporary_dir/workspace-replacement"
 ln -s "$poison_module" "$workspace_replacement"
 
 printf '%s\n' \
-  'go 1.26.6' \
+  'go 1.26.8' \
   'use .' \
   "replace github.com/getkin/kin-openapi => $workspace_replacement" \
   >"$workspace/go.work"
@@ -277,7 +277,7 @@ expect_unchanged "repository-local workspace preserves destination"
 rm -f "$workspace/go.work"
 
 printf '%s\n' \
-  'go 1.26.6' \
+  'go 1.26.8' \
   'use "./workspace with spaces"' \
   "replace github.com/getkin/kin-openapi => $workspace_replacement" \
   >"$temporary_dir/go.work"
@@ -295,7 +295,7 @@ rm -f "$temporary_dir/go.work"
 
 caller_workspace="$temporary_dir/caller-workspace.work"
 printf '%s\n' \
-  'go 1.26.6' \
+  'go 1.26.8' \
   'use "./workspace with spaces"' \
   "replace github.com/getkin/kin-openapi => $workspace_replacement" \
   >"$caller_workspace"

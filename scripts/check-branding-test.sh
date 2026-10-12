@@ -124,7 +124,7 @@ mkdir -p "$workspace_replacement"
 printf '%s\n' 'module github.com/getkin/kin-openapi' >"$workspace_replacement/go.mod"
 
 printf '%s\n' \
-  'go 1.26.5' \
+  'go 1.26.8' \
   'use .' \
   "replace github.com/getkin/kin-openapi => \"$workspace_replacement\"" \
   >"$repo_workspace_file"
@@ -134,7 +134,7 @@ rm -f "$repo_workspace_file"
 repo_workspace_created=0
 
 printf '%s\n' \
-  'go 1.26.5' \
+  'go 1.26.8' \
   'use ./wavo-cli' \
   "replace github.com/getkin/kin-openapi => \"$workspace_replacement\"" \
   >"$parent_workspace_file"
@@ -145,7 +145,7 @@ parent_workspace_created=0
 
 caller_workspace="$temporary_dir/caller workspace.work"
 printf '%s\n' \
-  'go 1.26.5' \
+  'go 1.26.8' \
   "use \"$repo_root\"" \
   "replace github.com/getkin/kin-openapi => \"$workspace_replacement\"" \
   >"$caller_workspace"
